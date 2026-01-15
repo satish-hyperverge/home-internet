@@ -7,7 +7,7 @@
 # <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>
 # <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
 
-PLUGIN_VERSION="3.1"
+PLUGIN_VERSION="3.2"
 
 # Configuration
 SERVER_URL="${SPEED_MONITOR_SERVER:-https://home-internet-production.up.railway.app}"
@@ -136,7 +136,12 @@ if [[ -n "$SERVER_DATA" ]] && echo "$SERVER_DATA" | grep -q "avg_download"; then
     # Parse JSON using basic tools
     AVG_DOWN=$(echo "$SERVER_DATA" | grep -o '"avg_download":[0-9.]*' | cut -d: -f2)
     AVG_UP=$(echo "$SERVER_DATA" | grep -o '"avg_upload":[0-9.]*' | cut -d: -f2)
-    AVG_JITTER=$(echo "$SERVER_DATA" | grep -o '"avg_jitter":[0-9.]*' | cut -d: -f2)
+    # Use median jitter (more accurate, ignores outliers)
+    MEDIAN_JITTER=$(echo "$SERVER_DATA" | grep -o '"median_jitter":[0-9.]*' | cut -d: -f2)
+    # Fallback to avg_jitter if median not available
+    if [[ -z "$MEDIAN_JITTER" ]]; then
+        MEDIAN_JITTER=$(echo "$SERVER_DATA" | grep -o '"avg_jitter":[0-9.]*' | cut -d: -f2)
+    fi
     TOTAL_TESTS=$(echo "$SERVER_DATA" | grep -o '"total_tests":[0-9]*' | cut -d: -f2)
     VPN_STATUS=$(echo "$SERVER_DATA" | grep -o '"current_vpn_status":"[^"]*"' | cut -d'"' -f4)
     VPN_NAME=$(echo "$SERVER_DATA" | grep -o '"current_vpn_name":"[^"]*"' | cut -d'"' -f4)
@@ -152,7 +157,7 @@ if [[ -n "$SERVER_DATA" ]] && echo "$SERVER_DATA" | grep -q "avg_download"; then
         # Format display values
         DOWN_DISPLAY=$(format_num "$AVG_DOWN")
         UP_DISPLAY=$(format_num "$AVG_UP")
-        JITTER_DISPLAY=$(format_num "$AVG_JITTER")
+        JITTER_DISPLAY=$(format_num "$MEDIAN_JITTER")
 
         # Menu bar display with VPN indicator and update badge
         MENU_BAR="↓${DOWN_DISPLAY} ↑${UP_DISPLAY}"
@@ -174,7 +179,7 @@ if [[ -n "$SERVER_DATA" ]] && echo "$SERVER_DATA" | grep -q "avg_download"; then
         echo "📊 Performance (Avg) | size=12 color=#888888"
         echo "Download: ${DOWN_DISPLAY} Mbps | sfimage=arrow.down.circle"
         echo "Upload: ${UP_DISPLAY} Mbps | sfimage=arrow.up.circle"
-        echo "Jitter: ${JITTER_DISPLAY} ms | sfimage=waveform.path"
+        echo "Jitter: ${JITTER_DISPLAY} ms (median) | sfimage=waveform.path"
         echo "---"
 
         # VPN Status

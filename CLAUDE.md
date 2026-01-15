@@ -1,4 +1,4 @@
-# Speed Monitor v3.0 - Organization Internet Monitoring
+# Speed Monitor v3.1 - Organization Internet Monitoring
 
 ## Overview
 
@@ -6,9 +6,12 @@ Speed Monitor is an automated internet performance tracking system for organizat
 - **Client**: macOS shell script that runs speed tests every 10 minutes via launchd
 - **Server**: Node.js/Express API with SQLite database, deployed on Railway
 - **Dashboard**: Real-time web dashboard with shadcn-inspired UI
+- **Menu Bar**: SwiftBar plugin showing live connection stats
+- **Self-Service Portal**: Employee-facing dashboard at `/my/:email`
 
 **Live URLs:**
 - Dashboard: https://home-internet-production.up.railway.app/
+- Self-Service Portal: https://home-internet-production.up.railway.app/my
 - Setup Guide: https://home-internet-production.up.railway.app/setup
 - GitHub: https://github.com/hyperkishore/home-internet
 
@@ -32,7 +35,7 @@ Speed Monitor is an automated internet performance tracking system for organizat
 ```
 home-internet/
 ├── CLAUDE.md                    # This file - project documentation
-├── speed_monitor.sh             # Main client script (v2.0)
+├── speed_monitor.sh             # Main client script (v2.1)
 ├── com.speedmonitor.plist       # launchd configuration
 ├── swiftbar-plugin.sh           # SwiftBar menu bar integration
 │
@@ -41,12 +44,13 @@ home-internet/
 │   ├── src/
 │   │   └── wifi_info.swift      # Swift helper for WiFi details
 │   └── server/
-│       ├── index.js             # Express server (v3.0)
+│       ├── index.js             # Express server (v3.1)
 │       ├── package.json         # Node dependencies
 │       ├── Dockerfile           # Railway deployment
 │       └── public/
-│           ├── dashboard.html   # Main dashboard (shadcn UI)
-│           ├── my-device.html   # Self-service portal
+│           ├── dashboard.html   # IT Admin dashboard (shadcn UI)
+│           ├── my.html          # Employee portal landing page
+│           ├── my-employee.html # Employee self-service dashboard
 │           └── setup.html       # Installation guide
 │
 └── credentials.md               # Router credentials (gitignored)
@@ -93,6 +97,12 @@ home-internet/
 | GET | `/api/devices/:id/health` | Device health + recent tests |
 | GET | `/api/devices/:id/troubleshoot` | Auto-generated recommendations |
 | GET | `/api/devices/:id/export?days=30` | CSV export of device data |
+
+### Employee Self-Service (v3.1)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/my/:email` | Employee dashboard data (health, timeline, recommendations) |
+| GET | `/api/stats/timeline?hours=24` | Speed timeline for charts |
 
 ### Alerts Endpoints
 | Method | Endpoint | Purpose |
@@ -361,4 +371,34 @@ cat ~/.config/nkspeedtest/device_id
 |---------|------|---------|
 | 1.0 | - | Basic speed logging to CSV |
 | 2.0 | - | Server upload, WiFi metrics, VPN detection |
-| 3.0 | 2025-01 | Anomaly detection, Slack alerts, ISP comparison, shadcn UI |
+| 2.1 | 2026-01 | Added user_email support, fixed netstat dash handling |
+| 3.0 | 2026-01 | Anomaly detection, Slack alerts, ISP comparison, shadcn UI |
+| 3.1 | 2026-01 | Employee self-service portal, median jitter, local time display, speed timeline charts |
+
+---
+
+## Key Features (v3.1)
+
+### Employee Self-Service Portal
+- **URL**: `/my` → enter email → `/my/:email`
+- **Traffic light status**: Green/Yellow/Red health indicator
+- **Problem detection**: High jitter, weak signal, slow speed, VPN off
+- **Recommendations**: Actionable suggestions based on diagnostics
+- **24-hour speed chart**: Interactive Chart.js visualization
+- **Recent tests table**: Last 10 speed test results
+- **Share/Export**: Copy link, email IT support
+
+### Median vs Average Jitter
+- **Problem**: One outlier (19712ms) skewed average to 1411ms
+- **Solution**: Use median jitter (typically ~4ms) for accurate representation
+- **API**: Returns both `avg_jitter` and `median_jitter`
+
+### Data Collection (v2.1 client)
+| Metric | Source | Notes |
+|--------|--------|-------|
+| MCS Index | system_profiler | WiFi link quality |
+| Spatial Streams | Calculated | From MCS index |
+| Interface Errors | netstat -I en0 | Input/output error rates |
+| TCP Retransmits | netstat -s | Connection quality |
+| BSSID Changes | Tracked | Roaming detection |
+| User Email | ~/.config/nkspeedtest/user_email | Set during install |
