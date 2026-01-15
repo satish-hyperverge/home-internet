@@ -696,6 +696,20 @@ app.get('/api/my/:email', (req, res) => {
       WHERE device_id = ?
     `).get(deviceId);
 
+    // Calculate median jitter (more robust than average for outliers)
+    const jitterValues = db.prepare(`
+      SELECT jitter_ms
+      FROM speed_results
+      WHERE device_id = ? AND status = 'success' AND jitter_ms IS NOT NULL
+      ORDER BY jitter_ms
+    `).all(deviceId).map(r => r.jitter_ms);
+
+    const medianJitter = jitterValues.length > 0
+      ? jitterValues[Math.floor(jitterValues.length / 2)]
+      : 0;
+
+    health.median_jitter = Math.round(medianJitter * 100) / 100;
+
     // Get latest test for current status
     const latest = db.prepare(`
       SELECT *
