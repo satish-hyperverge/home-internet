@@ -114,6 +114,7 @@ class SpeedDataManager: ObservableObject {
     @Published var vpnStatus: String = ""
     @Published var updateAvailable: Bool = false
     @Published var isRunningTest: Bool = false
+    @Published var isUpdating: Bool = false
 
     private var refreshTimer: Timer?
 
@@ -122,6 +123,13 @@ class SpeedDataManager: ObservableObject {
         // Refresh every 30 seconds
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.refresh()
+        }
+
+        // Auto-run speed test if no data exists (first launch)
+        if lastDownload == 0 && lastTest == nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.runSpeedTest()
+            }
         }
     }
 
@@ -149,6 +157,47 @@ class SpeedDataManager: ObservableObject {
             DispatchQueue.main.async {
                 self?.isRunningTest = false
                 self?.refresh()
+            }
+        }
+    }
+
+    func updateApp() {
+        guard !isUpdating else { return }
+        isUpdating = true
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            // Download and install latest SpeedMonitor.app
+            let script = """
+            curl -fsSL "https://raw.githubusercontent.com/hyperkishore/home-internet/main/dist/SpeedMonitor.app.zip" -o /tmp/SpeedMonitor.app.zip && \
+            unzip -o /tmp/SpeedMonitor.app.zip -d /tmp/ && \
+            rm -rf /Applications/SpeedMonitor.app && \
+            cp -r /tmp/SpeedMonitor.app /Applications/ && \
+            rm -f /tmp/SpeedMonitor.app.zip && \
+            rm -rf /tmp/SpeedMonitor.app
+            """
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = ["-c", script]
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+
+                if process.terminationStatus == 0 {
+                    // Relaunch the app
+                    DispatchQueue.main.async {
+                        let url = URL(fileURLWithPath: "/Applications/SpeedMonitor.app")
+                        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+                        NSApplication.shared.terminate(nil)
+                    }
+                }
+            } catch {
+                print("Failed to update app: \(error)")
+            }
+
+            DispatchQueue.main.async {
+                self?.isUpdating = false
             }
         }
     }
@@ -470,6 +519,15 @@ struct MenuBarView: View {
                 }
             }
             .buttonStyle(.plain)
+
+            Button(action: { speedData.updateApp() }) {
+                HStack {
+                    Image(systemName: speedData.isUpdating ? "hourglass" : "arrow.down.circle")
+                    Text(speedData.isUpdating ? "Updating..." : "Update App")
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(speedData.isUpdating)
 
             Divider()
 
