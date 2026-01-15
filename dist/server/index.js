@@ -651,6 +651,213 @@ app.get('/api/devices/:device_id/history', (req, res) => {
   }
 });
 
+// API: Employee Self-Service Portal - Get my connection data by email
+app.get('/api/my/:email', (req, res) => {
+  const { email } = req.params;
+  const hours = Math.min(parseInt(req.query.hours) || 24, 168);
+
+  try {
+    // Find device by email
+    const device = db.prepare(`
+      SELECT DISTINCT device_id
+      FROM speed_results
+      WHERE LOWER(user_email) = LOWER(?)
+      ORDER BY timestamp_utc DESC
+      LIMIT 1
+    `).get(email);
+
+    if (!device) {
+      return res.status(404).json({
+        error: 'not_found',
+        message: 'No device found for this email. Make sure Speed Monitor is installed and configured with your email.'
+      });
+    }
+
+    const deviceId = device.device_id;
+
+    // Get health summary
+    const health = db.prepare(`
+      SELECT
+        device_id,
+        MAX(user_email) as user_email,
+        MAX(hostname) as hostname,
+        MAX(os_version) as os_version,
+        MAX(app_version) as app_version,
+        COUNT(*) as total_tests,
+        ROUND(AVG(CASE WHEN status = 'success' THEN download_mbps END), 2) as avg_download,
+        ROUND(AVG(CASE WHEN status = 'success' THEN upload_mbps END), 2) as avg_upload,
+        ROUND(AVG(CASE WHEN status = 'success' THEN latency_ms END), 2) as avg_latency,
+        ROUND(AVG(CASE WHEN status = 'success' THEN jitter_ms END), 2) as avg_jitter,
+        ROUND(AVG(CASE WHEN status = 'success' THEN packet_loss_pct END), 3) as avg_packet_loss,
+        MAX(timestamp_utc) as last_seen,
+        MAX(vpn_status) as vpn_status,
+        MAX(vpn_name) as vpn_name
+      FROM speed_results
+      WHERE device_id = ?
+    `).get(deviceId);
+
+    // Get latest test for current status
+    const latest = db.prepare(`
+      SELECT *
+      FROM speed_results
+      WHERE device_id = ?
+      ORDER BY timestamp_utc DESC
+      LIMIT 1
+    `).get(deviceId);
+
+    // Get recent tests
+    const recentTests = db.prepare(`
+      SELECT
+        timestamp_utc,
+        download_mbps,
+        upload_mbps,
+        latency_ms,
+        jitter_ms,
+        packet_loss_pct,
+        vpn_status,
+        vpn_name,
+        ssid,
+        rssi_dbm,
+        band,
+        channel,
+        status
+      FROM speed_results
+      WHERE device_id = ?
+      ORDER BY timestamp_utc DESC
+      LIMIT 10
+    `).all(deviceId);
+
+    // Get timeline for chart (last 24h by default)
+    const timeline = db.prepare(`
+      SELECT
+        timestamp_utc,
+        download_mbps,
+        upload_mbps,
+        latency_ms,
+        jitter_ms
+      FROM speed_results
+      WHERE device_id = ?
+        AND status = 'success'
+        AND timestamp_utc > datetime('now', '-' || ? || ' hours')
+      ORDER BY timestamp_utc ASC
+    `).all(deviceId, hours);
+
+    // Determine health status and generate recommendations
+    const problems = [];
+    const recommendations = [];
+
+    if (latest) {
+      // Check jitter
+      if (latest.jitter_ms > 30) {
+        problems.push({
+          type: 'high_jitter',
+          severity: latest.jitter_ms > 50 ? 'critical' : 'warning',
+          message: `High jitter (${latest.jitter_ms.toFixed(1)}ms) - may cause choppy video calls`,
+          value: latest.jitter_ms
+        });
+        recommendations.push('Close bandwidth-heavy applications during calls');
+        recommendations.push('Try using a wired ethernet connection');
+      }
+
+      // Check signal strength
+      if (latest.rssi_dbm && latest.rssi_dbm < -70) {
+        problems.push({
+          type: 'weak_signal',
+          severity: latest.rssi_dbm < -80 ? 'critical' : 'warning',
+          message: `Weak WiFi signal (${latest.rssi_dbm} dBm)`,
+          value: latest.rssi_dbm
+        });
+        recommendations.push('Move closer to your WiFi router');
+        recommendations.push('Remove obstacles between you and the router');
+      }
+
+      // Check download speed
+      if (latest.download_mbps < 25) {
+        problems.push({
+          type: 'slow_download',
+          severity: latest.download_mbps < 10 ? 'critical' : 'warning',
+          message: `Slow download speed (${latest.download_mbps.toFixed(1)} Mbps)`,
+          value: latest.download_mbps
+        });
+        recommendations.push('Check if others are using bandwidth on your network');
+        recommendations.push('Consider upgrading your internet plan');
+      }
+
+      // Check VPN
+      if (latest.vpn_status !== 'connected') {
+        problems.push({
+          type: 'vpn_disconnected',
+          severity: 'info',
+          message: 'VPN is not connected',
+          value: null
+        });
+        recommendations.push('Connect to VPN for secure access to company resources');
+      }
+
+      // Check packet loss
+      if (latest.packet_loss_pct > 1) {
+        problems.push({
+          type: 'packet_loss',
+          severity: latest.packet_loss_pct > 3 ? 'critical' : 'warning',
+          message: `Packet loss detected (${latest.packet_loss_pct.toFixed(1)}%)`,
+          value: latest.packet_loss_pct
+        });
+        recommendations.push('Check for WiFi interference from other devices');
+        recommendations.push('Try switching to 5GHz band if available');
+      }
+
+      // Band recommendation
+      if (latest.band === '2.4GHz' && latest.rssi_dbm > -60) {
+        recommendations.push('Switch to 5GHz band for faster speeds (you have good signal)');
+      }
+    }
+
+    // Determine overall status
+    const criticalCount = problems.filter(p => p.severity === 'critical').length;
+    const warningCount = problems.filter(p => p.severity === 'warning').length;
+
+    let status = 'healthy';
+    let statusMessage = 'Your connection looks good!';
+
+    if (criticalCount > 0) {
+      status = 'critical';
+      statusMessage = `${criticalCount} critical issue${criticalCount > 1 ? 's' : ''} detected`;
+    } else if (warningCount > 0) {
+      status = 'warning';
+      statusMessage = `${warningCount} issue${warningCount > 1 ? 's' : ''} to review`;
+    }
+
+    // WiFi details
+    const wifi = latest ? {
+      ssid: latest.ssid || 'Unknown',
+      band: latest.band || 'Unknown',
+      channel: latest.channel || 'Unknown',
+      rssi: latest.rssi_dbm,
+      signalQuality: latest.rssi_dbm > -50 ? 'Excellent' :
+                     latest.rssi_dbm > -60 ? 'Good' :
+                     latest.rssi_dbm > -70 ? 'Fair' : 'Poor',
+      txRate: latest.tx_rate_mbps
+    } : null;
+
+    res.json({
+      email,
+      deviceId,
+      status,
+      statusMessage,
+      health,
+      latest,
+      wifi,
+      problems,
+      recommendations: [...new Set(recommendations)], // dedupe
+      recentTests,
+      timeline
+    });
+  } catch (err) {
+    console.error('Error fetching self-service data:', err);
+    res.status(500).json({ error: 'Failed to fetch connection data' });
+  }
+});
+
 // API: Speed timeline (all devices, for chart)
 app.get('/api/stats/timeline', (req, res) => {
   const hours = Math.min(parseInt(req.query.hours) || 24, 168); // Max 7 days
@@ -1991,7 +2198,17 @@ app.get('/api/anomalies', (req, res) => {
   }
 });
 
-// Self-service portal route
+// Employee self-service portal landing page
+app.get('/my', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'my.html'));
+});
+
+// Employee self-service portal by email
+app.get('/my/:email', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'my-employee.html'));
+});
+
+// Self-service portal route (by device ID - for IT admins)
 app.get('/device/:device_id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'my-device.html'));
 });

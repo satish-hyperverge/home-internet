@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Connection - Speed Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        :root {
+            --background: #09090b;
+            --foreground: #fafafa;
+            --card: #18181b;
+            --border: #27272a;
+            --muted: #a1a1aa;
+            --primary: #3b82f6;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --destructive: #ef4444;
+            --radius: 0.5rem;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-left h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .header-email {
+            color: var(--muted);
+            font-size: 0.875rem;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--foreground);
+            cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+
+        .btn:hover { background: var(--border); }
+
+        .btn-primary {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-primary:hover { opacity: 0.9; background: var(--primary); }
+
+        /* Status Card */
+        .status-card {
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .status-card.healthy {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .status-card.warning {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+
+        .status-card.critical {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .status-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            font-size: 28px;
+        }
+
+        .status-card.healthy .status-icon { background: rgba(34, 197, 94, 0.2); }
+        .status-card.warning .status-icon { background: rgba(245, 158, 11, 0.2); }
+        .status-card.critical .status-icon { background: rgba(239, 68, 68, 0.2); }
+
+        .status-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .status-card.healthy .status-title { color: var(--success); }
+        .status-card.warning .status-title { color: var(--warning); }
+        .status-card.critical .status-title { color: var(--destructive); }
+
+        .status-subtitle {
+            color: var(--muted);
+            font-size: 0.875rem;
+        }
+
+        /* Quick Stats */
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 640px) {
+            .quick-stats { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .stat-item {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 4px;
+        }
+
+        /* Problems Section */
+        .problems-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .problem-list {
+            padding: 12px 20px;
+        }
+
+        .problem-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .problem-item:last-child { border-bottom: none; }
+
+        .problem-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 14px;
+        }
+
+        .problem-icon.warning { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .problem-icon.critical { background: rgba(239, 68, 68, 0.2); color: var(--destructive); }
+        .problem-icon.info { background: rgba(59, 130, 246, 0.2); color: var(--primary); }
+
+        .problem-text { flex: 1; }
+
+        .problem-title {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .problem-desc {
+            font-size: 0.8125rem;
+            color: var(--muted);
+        }
+
+        /* Recommendations */
+        .recommendations {
+            background: rgba(59, 130, 246, 0.05);
+            border: 1px solid rgba(59, 130, 246, 0.15);
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+
+        .recommendations h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--primary);
+        }
+
+        .recommendations ul {
+            list-style: none;
+        }
+
+        .recommendations li {
+            padding: 6px 0;
+            padding-left: 20px;
+            position: relative;
+            font-size: 0.875rem;
+            color: var(--muted);
+        }
+
+        .recommendations li::before {
+            content: "\2192";
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+        }
+
+        /* Chart Section */
+        .chart-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .chart-title {
+            font-weight: 600;
+        }
+
+        .chart-container {
+            height: 200px;
+        }
+
+        /* WiFi Details */
+        .wifi-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+
+        .wifi-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: var(--border);
+        }
+
+        @media (max-width: 640px) {
+            .wifi-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .wifi-item {
+            background: var(--card);
+            padding: 16px;
+        }
+
+        .wifi-item-label {
+            font-size: 0.7rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+
+        .wifi-item-value {
+            font-weight: 500;
+        }
+
+        /* Recent Tests */
+        .tests-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+
+        .test-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .test-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.875rem;
+        }
+
+        .test-row:last-child { border-bottom: none; }
+
+        .test-time {
+            color: var(--muted);
+            min-width: 80px;
+        }
+
+        .test-speeds {
+            display: flex;
+            gap: 20px;
+        }
+
+        .test-speed {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .test-speed.down { color: var(--primary); }
+        .test-speed.up { color: var(--success); }
+
+        /* Actions */
+        .actions-section {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--muted);
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Error */
+        .error-state {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .error-icon {
+            width: 64px;
+            height: 64px;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            color: var(--destructive);
+        }
+
+        .error-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .error-message {
+            color: var(--muted);
+            margin-bottom: 24px;
+        }
+
+        /* Copy toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--card);
+            border: 1px solid var(--border);
+            padding: 12px 20px;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+
+        .toast.show { opacity: 1; }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--background); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="content">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Loading your connection data...</p>
+            </div>
+        </div>
+    </div>
+    <div class="toast" id="toast">Link copied to clipboard!</div>
+
+    <script>
+        let speedChart = null;
+
+        async function loadData() {
+            const pathParts = window.location.pathname.split('/');
+            const email = decodeURIComponent(pathParts[pathParts.length - 1]);
+
+            if (!email || email === 'my') {
+                window.location.href = '/my';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/my/${encodeURIComponent(email)}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    renderError(data.message || 'Unable to load data');
+                    return;
+                }
+
+                renderDashboard(data);
+            } catch (err) {
+                renderError('Failed to connect to server');
+            }
+        }
+
+        function renderError(message) {
+            document.getElementById('content').innerHTML = `
+                <div class="error-state">
+                    <div class="error-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 8v4"/>
+                            <path d="M12 16h.01"/>
+                        </svg>
+                    </div>
+                    <h2 class="error-title">Unable to Load Data</h2>
+                    <p class="error-message">${message}</p>
+                    <a href="/my" class="btn btn-primary">Try Different Email</a>
+                </div>
+            `;
+        }
+
+        function renderDashboard(data) {
+            const statusEmoji = data.status === 'healthy' ? '\u2713' : data.status === 'warning' ? '!' : '\u2717';
+            const lastSeen = data.latest ? getRelativeTime(data.latest.timestamp_utc) : 'Never';
+
+            let html = `
+                <header class="header">
+                    <div class="header-left">
+                        <h1>My Connection Health</h1>
+                        <div class="header-email">${data.email} \u2022 Last checked ${lastSeen}</div>
+                    </div>
+                    <div class="header-right">
+                        <button class="btn" onclick="copyShareLink()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+                            Share
+                        </button>
+                        <a href="/" class="btn">Dashboard</a>
+                    </div>
+                </header>
+
+                <div class="status-card ${data.status}">
+                    <div class="status-icon">${statusEmoji}</div>
+                    <div class="status-title">${data.statusMessage}</div>
+                    <div class="status-subtitle">Based on your most recent speed test</div>
+                </div>
+
+                <div class="quick-stats">
+                    <div class="stat-item">
+                        <div class="stat-value">${data.latest ? Math.round(data.latest.download_mbps) : '--'}</div>
+                        <div class="stat-label">Download Mbps</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${data.latest ? Math.round(data.latest.upload_mbps) : '--'}</div>
+                        <div class="stat-label">Upload Mbps</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${data.latest ? Math.round(data.latest.latency_ms) : '--'}</div>
+                        <div class="stat-label">Latency ms</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${data.latest && data.latest.vpn_status === 'connected' ? '\u2713' : '\u2717'}</div>
+                        <div class="stat-label">VPN ${data.latest && data.latest.vpn_status === 'connected' ? 'On' : 'Off'}</div>
+                    </div>
+                </div>
+            `;
+
+            // Problems section
+            if (data.problems && data.problems.length > 0) {
+                html += `
+                    <div class="problems-section">
+                        <div class="section-header">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                            Issues Detected
+                        </div>
+                        <div class="problem-list">
+                            ${data.problems.map(p => `
+                                <div class="problem-item">
+                                    <div class="problem-icon ${p.severity}">
+                                        ${p.severity === 'critical' ? '!' : p.severity === 'warning' ? '\u26A0' : '\u2139'}
+                                    </div>
+                                    <div class="problem-text">
+                                        <div class="problem-title">${p.message}</div>
+                                        <div class="problem-desc">${getProblemDescription(p.type)}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Recommendations
+            if (data.recommendations && data.recommendations.length > 0) {
+                html += `
+                    <div class="recommendations">
+                        <h3>Recommendations</h3>
+                        <ul>
+                            ${data.recommendations.map(r => `<li>${r}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            // Speed Chart
+            if (data.timeline && data.timeline.length > 1) {
+                html += `
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <div class="chart-title">Speed History (Last 24 Hours)</div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="speedChart"></canvas>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // WiFi Details
+            if (data.wifi && data.wifi.ssid) {
+                html += `
+                    <div class="wifi-section">
+                        <div class="section-header">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+                            WiFi Details
+                        </div>
+                        <div class="wifi-grid">
+                            <div class="wifi-item">
+                                <div class="wifi-item-label">Network</div>
+                                <div class="wifi-item-value">${data.wifi.ssid}</div>
+                            </div>
+                            <div class="wifi-item">
+                                <div class="wifi-item-label">Band</div>
+                                <div class="wifi-item-value">${data.wifi.band || 'Unknown'}</div>
+                            </div>
+                            <div class="wifi-item">
+                                <div class="wifi-item-label">Channel</div>
+                                <div class="wifi-item-value">${data.wifi.channel || 'Unknown'}</div>
+                            </div>
+                            <div class="wifi-item">
+                                <div class="wifi-item-label">Signal Strength</div>
+                                <div class="wifi-item-value">${data.wifi.rssi ? data.wifi.rssi + ' dBm' : '--'}</div>
+                            </div>
+                            <div class="wifi-item">
+                                <div class="wifi-item-label">Signal Quality</div>
+                                <div class="wifi-item-value">${data.wifi.signalQuality || 'Unknown'}</div>
+                            </div>
+                            <div class="wifi-item">
+                                <div class="wifi-item-label">Link Speed</div>
+                                <div class="wifi-item-value">${data.wifi.txRate ? data.wifi.txRate + ' Mbps' : '--'}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Recent Tests
+            if (data.recentTests && data.recentTests.length > 0) {
+                html += `
+                    <div class="tests-section">
+                        <div class="section-header">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            Recent Tests
+                        </div>
+                        <div class="test-list">
+                            ${data.recentTests.map(t => `
+                                <div class="test-row">
+                                    <span class="test-time">${formatTime(t.timestamp_utc)}</span>
+                                    <div class="test-speeds">
+                                        <span class="test-speed down">\u2193 ${Math.round(t.download_mbps)}</span>
+                                        <span class="test-speed up">\u2191 ${Math.round(t.upload_mbps)}</span>
+                                        <span>${Math.round(t.latency_ms)}ms</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Actions
+            html += `
+                <div class="actions-section">
+                    <button class="btn" onclick="copyShareLink()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+                        Share Report
+                    </button>
+                    <a href="mailto:it@company.com?subject=Internet%20Connection%20Issue&body=My%20connection%20report:%20${encodeURIComponent(window.location.href)}" class="btn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                        Email IT
+                    </a>
+                    <a href="/my" class="btn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                        Check Another Email
+                    </a>
+                </div>
+            `;
+
+            document.getElementById('content').innerHTML = html;
+
+            // Initialize chart
+            if (data.timeline && data.timeline.length > 1) {
+                setTimeout(() => initChart(data.timeline), 100);
+            }
+        }
+
+        function initChart(timeline) {
+            const canvas = document.getElementById('speedChart');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+
+            const downloadData = timeline.map(d => ({
+                x: new Date(d.timestamp_utc),
+                y: d.download_mbps
+            }));
+
+            const uploadData = timeline.map(d => ({
+                x: new Date(d.timestamp_utc),
+                y: d.upload_mbps
+            }));
+
+            speedChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Download',
+                            data: downloadData,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            label: 'Upload',
+                            data: uploadData,
+                            borderColor: '#22c55e',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            tension: 0.3,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            align: 'end',
+                            labels: { color: '#a1a1aa', usePointStyle: true }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { displayFormats: { hour: 'HH:mm' } },
+                            grid: { color: 'rgba(39, 39, 42, 0.5)' },
+                            ticks: { color: '#71717a' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(39, 39, 42, 0.5)' },
+                            ticks: { color: '#71717a', callback: v => v + ' Mbps' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function getProblemDescription(type) {
+            const descriptions = {
+                'high_jitter': 'High jitter causes choppy video and audio during calls',
+                'weak_signal': 'Weak signal reduces speed and increases disconnections',
+                'slow_download': 'Slow speeds may affect video calls and file downloads',
+                'vpn_disconnected': 'VPN is required for secure access to company resources',
+                'packet_loss': 'Packet loss causes stuttering in video calls'
+            };
+            return descriptions[type] || '';
+        }
+
+        function getRelativeTime(timestamp) {
+            const now = Date.now();
+            const then = new Date(timestamp).getTime();
+            const diff = now - then;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            if (minutes < 1) return 'just now';
+            if (minutes < 60) return minutes + 'm ago';
+            if (hours < 24) return hours + 'h ago';
+            return Math.floor(hours / 24) + 'd ago';
+        }
+
+        function formatTime(timestamp) {
+            return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function copyShareLink() {
+            navigator.clipboard.writeText(window.location.href).then(() => {
+                const toast = document.getElementById('toast');
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+            });
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
