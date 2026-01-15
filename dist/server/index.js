@@ -20,8 +20,13 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/', limiter);
 
-// Initialize SQLite database
-const db = new Database(process.env.DB_PATH || './speed_monitor.db');
+// Initialize SQLite database with persistent storage
+// Railway provides RAILWAY_VOLUME_MOUNT_PATH for persistent volumes
+const dbPath = process.env.RAILWAY_VOLUME_MOUNT_PATH
+  ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'speed_monitor.db')
+  : (process.env.DB_PATH || './speed_monitor.db');
+console.log(`Database path: ${dbPath}`);
+const db = new Database(dbPath);
 
 // Create tables with v2.1 schema (added WiFi debugging fields)
 db.exec(`
