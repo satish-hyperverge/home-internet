@@ -191,6 +191,12 @@ get_interface_stats() {
         output_errors=$(echo "$netstat_output" | awk '{print $8}')
     fi
 
+    # Ensure numeric values (default to 0 if empty, dash, or non-numeric)
+    [[ "$input_packets" == "-" || -z "$input_packets" ]] && input_packets=0
+    [[ "$input_errors" == "-" || -z "$input_errors" ]] && input_errors=0
+    [[ "$output_packets" == "-" || -z "$output_packets" ]] && output_packets=0
+    [[ "$output_errors" == "-" || -z "$output_errors" ]] && output_errors=0
+
     # Calculate error rates based on previous values
     local prev_stats_file="$DATA_DIR/prev_interface_stats"
     local input_error_rate=0
@@ -201,6 +207,12 @@ get_interface_stats() {
         local prev_ierrs=$(awk 'NR==2' "$prev_stats_file")
         local prev_opkts=$(awk 'NR==3' "$prev_stats_file")
         local prev_oerrs=$(awk 'NR==4' "$prev_stats_file")
+
+        # Default to 0 if empty or dash
+        [[ "$prev_ipkts" == "-" || -z "$prev_ipkts" ]] && prev_ipkts=0
+        [[ "$prev_ierrs" == "-" || -z "$prev_ierrs" ]] && prev_ierrs=0
+        [[ "$prev_opkts" == "-" || -z "$prev_opkts" ]] && prev_opkts=0
+        [[ "$prev_oerrs" == "-" || -z "$prev_oerrs" ]] && prev_oerrs=0
 
         local delta_ipkts=$((input_packets - prev_ipkts))
         local delta_ierrs=$((input_errors - prev_ierrs))
