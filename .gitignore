@@ -22,3 +22,4 @@ speed_log.csv
 node_modules/
 dist/src/wifi_info
 dist/server/*.db
+WiFiHelper/build/

@@ -6,7 +6,7 @@ Speed Monitor is an automated internet performance tracking system for organizat
 - **Client**: macOS shell script that runs speed tests every 10 minutes via launchd
 - **Server**: Node.js/Express API with SQLite database, deployed on Railway
 - **Dashboard**: Real-time web dashboard with shadcn-inspired UI
-- **Menu Bar**: SwiftBar plugin showing live connection stats
+- **Menu Bar**: Native macOS app showing live connection stats with Location Services support
 - **Self-Service Portal**: Employee-facing dashboard at `/my/:email`
 - **Self-Update**: Built-in update mechanism via `speed_monitor.sh --update`
 
@@ -39,7 +39,11 @@ home-internet/
 ├── VERSION                      # Single source of truth for app version (3.0.0)
 ├── speed_monitor.sh             # Main client script (v3.0.0)
 ├── com.speedmonitor.plist       # launchd configuration
-├── swiftbar-plugin.sh           # SwiftBar menu bar integration (v3.0.0)
+│
+├── WiFiHelper/                  # Native macOS menu bar app
+│   ├── SpeedMonitorMenuBar.swift   # SwiftUI menu bar app source
+│   ├── build.sh                 # Build script → SpeedMonitor.app
+│   └── Info.plist               # App bundle configuration
 │
 ├── dist/
 │   ├── install.sh               # One-line installer for employees
@@ -66,7 +70,7 @@ home-internet/
 |------|---------|
 | `VERSION` | Single source of truth for unified version (3.0.0) |
 | `speed_monitor.sh` | Runs speedtest-cli, collects WiFi metrics, POSTs to server, self-update |
-| `swiftbar-plugin.sh` | Menu bar widget showing current speeds, update notifications |
+| `WiFiHelper/SpeedMonitorMenuBar.swift` | Native menu bar app with Location Services for WiFi SSID |
 | `dist/install.sh` | One-line installer: installs Homebrew, speedtest-cli, sets up launchd |
 | `dist/server/index.js` | Express API with SQLite, anomaly detection, Slack alerts |
 | `dashboard.html` | Organization-wide stats, charts, device fleet view |
@@ -399,9 +403,15 @@ system_profiler SPAirPortDataType | grep -A 10 "Current Network"
 | 2.0 | - | Server upload, WiFi metrics, VPN detection |
 | 2.1 | 2026-01 | Added user_email support, fixed netstat dash handling |
 | 3.0.0 | 2026-01 | **Unified versioning across all components**, self-update mechanism, macOS Sequoia WiFi fix |
+| 3.1.0 | 2026-01 | **Native menu bar app** replaces SwiftBar, proper Location Services UI for WiFi SSID |
+
+### v3.1.0 Highlights
+- **Native Menu Bar App**: SpeedMonitor.app replaces SwiftBar plugin
+- **Location Services UI**: Proper macOS permission dialog for WiFi SSID access
+- **No Dependencies**: No need to install SwiftBar separately
 
 ### v3.0.0 Highlights
-- **Unified Version**: Single VERSION file controls all components (speed_monitor, swiftbar, installer, server)
+- **Unified Version**: Single VERSION file controls all components
 - **Self-Update**: `speed_monitor.sh --update` downloads and installs latest version
 - **macOS Sequoia Fix**: Uses `system_profiler SPAirPortDataType` when CoreWLAN lacks permissions
 - **Atomic Updates**: Temp file + mv pattern prevents corruption, timestamped backups
@@ -426,13 +436,38 @@ speed_monitor.sh --update
 # Downloads from GitHub, validates, creates timestamped backup, installs atomically
 ```
 
-**SwiftBar Integration**: Menu bar shows 🔄 badge when update available. Click "Install Update" to update.
+**Menu Bar App**: Native SpeedMonitor.app shows 🔄 badge when update available. Includes Settings panel to grant Location Services for WiFi SSID detection.
+
+### Native Menu Bar App (SpeedMonitor.app)
+Replaces the old SwiftBar plugin with a native SwiftUI app that can properly request Location Services.
+
+**Features:**
+- Live speed stats in menu bar (e.g., "🟢 45 Mbps")
+- WiFi network name, signal strength, channel display
+- VPN status indicator
+- Update available notification (🔄 badge)
+- Settings panel for Location Services permission
+- No SwiftBar dependency required
+
+**Build & Install:**
+```bash
+cd WiFiHelper
+./build.sh
+cp -r build/SpeedMonitor.app /Applications/
+open /Applications/SpeedMonitor.app
+```
+
+**Grant Location Services:**
+1. Click menu bar icon → Settings
+2. Click "Grant Permission"
+3. Allow in macOS prompt
+4. WiFi SSID now visible
 
 ### macOS Sequoia WiFi Detection
 WiFi metrics collection uses a 3-tier fallback:
-1. **CoreWLAN Swift helper** - Best data, but requires Location Services permission
-2. **airport command** - Legacy, removed in macOS Sequoia
-3. **system_profiler SPAirPortDataType** - Works on Sequoia, no permissions needed
+1. **SpeedMonitor.app** - Best: Native app with Location Services for full WiFi info
+2. **CoreWLAN Swift helper** - Requires Location Services permission
+3. **system_profiler SPAirPortDataType** - Fallback: Works on Sequoia, SSID redacted
 
 ### Employee Self-Service Portal
 - **URL**: `/my` → enter email → `/my/:email`
