@@ -7,7 +7,7 @@
 # <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>
 # <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
 
-PLUGIN_VERSION="3.2"
+PLUGIN_VERSION="3.3"
 
 # Configuration
 SERVER_URL="${SPEED_MONITOR_SERVER:-https://home-internet-production.up.railway.app}"
@@ -229,11 +229,11 @@ else
 
             TIMESTAMP="${FIELDS[0]}"
             SSID="${FIELDS[6]}"
-            DOWNLOAD="${FIELDS[22]}"
-            UPLOAD="${FIELDS[23]}"
-            VPN_STATUS="${FIELDS[24]}"
-            VPN_NAME="${FIELDS[25]}"
-            JITTER="${FIELDS[18]}"
+            DOWNLOAD="${FIELDS[24]}"
+            UPLOAD="${FIELDS[25]}"
+            VPN_STATUS="${FIELDS[26]}"
+            VPN_NAME="${FIELDS[27]}"
+            JITTER="${FIELDS[20]}"
 
             # Clean up values
             DOWNLOAD=$(echo "$DOWNLOAD" | xargs)

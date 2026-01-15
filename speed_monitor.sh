@@ -1,13 +1,14 @@
 #!/bin/bash
 #
-# Speed Monitor v2.3.0 - Organization-Wide Internet Speed Monitoring
+# Speed Monitor v2.4.0 - Organization-Wide Internet Speed Monitoring
 # Enhanced data collection for fleet deployment (300+ devices)
+# v2.4.0: Added curl timeout to prevent process hangs
 # v2.3.0: Bug fixes - jitter percentiles, TCP retransmits delta, JSON escaping, status field
 # v2.2.0: Fixed VPN detection - now checks for active tunnel, not just process running
 # v2.1.0: Added WiFi debugging metrics (MCS, error rates, BSSID tracking)
 #
 
-VERSION="2.3.0"
+VERSION="2.4.0"
 
 # Configuration
 DATA_DIR="$HOME/.local/share/nkspeedtest"
@@ -597,7 +598,7 @@ collect_metrics() {
     # Send to server if configured
     if [[ -n "$SERVER_URL" ]]; then
         log "Sending results to server..."
-        curl -s -X POST "$SERVER_URL/api/results" \
+        curl -s --max-time 10 --connect-timeout 5 -X POST "$SERVER_URL/api/results" \
             -H "Content-Type: application/json" \
             -d "$raw_payload" > /dev/null 2>&1 || log "Failed to send to server"
     fi

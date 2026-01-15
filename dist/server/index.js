@@ -7,10 +7,10 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Rate limiting
+// Rate limiting - increased for 300+ device fleet behind corporate NAT
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 500, // limit each IP to 500 requests per windowMs (supports 300 devices behind NAT)
   message: { error: 'Too many requests, please try again later.' }
 });
 
@@ -27,6 +27,12 @@ const dbPath = process.env.RAILWAY_VOLUME_MOUNT_PATH
   : (process.env.DB_PATH || './speed_monitor.db');
 console.log(`Database path: ${dbPath}`);
 const db = new Database(dbPath);
+
+// Configure SQLite for concurrent access (300+ devices)
+db.pragma('journal_mode = WAL');           // Write-Ahead Logging for concurrent reads/writes
+db.pragma('busy_timeout = 5000');          // Wait 5 seconds if database locked
+db.pragma('synchronous = NORMAL');         // Balance between safety and speed
+db.pragma('cache_size = -64000');          // 64MB cache
 
 // Create tables with v2.1 schema (added WiFi debugging fields)
 db.exec(`
@@ -641,13 +647,15 @@ app.get('/api/devices/:device_id/health', (req, res) => {
       FROM speed_results
       WHERE device_id = ? AND status = 'success' AND jitter_ms IS NOT NULL
       ORDER BY jitter_ms
-    `).all(device_id).map(r => r.jitter_ms);
+    `).all(device_id)
+      .map(r => parseFloat(r.jitter_ms))
+      .filter(v => !isNaN(v) && v >= 0);
 
     const medianJitter = jitterValues.length > 0
       ? jitterValues[Math.floor(jitterValues.length / 2)]
       : 0;
 
-    health.median_jitter = Math.round(medianJitter * 100) / 100;
+    health.median_jitter = isNaN(medianJitter) ? 0 : Math.round(medianJitter * 100) / 100;
 
     // Recent tests
     const recentTests = db.prepare(`
@@ -747,13 +755,15 @@ app.get('/api/my/:email', (req, res) => {
       FROM speed_results
       WHERE device_id = ? AND status = 'success' AND jitter_ms IS NOT NULL
       ORDER BY jitter_ms
-    `).all(deviceId).map(r => r.jitter_ms);
+    `).all(deviceId)
+      .map(r => parseFloat(r.jitter_ms))
+      .filter(v => !isNaN(v) && v >= 0);
 
     const medianJitter = jitterValues.length > 0
       ? jitterValues[Math.floor(jitterValues.length / 2)]
       : 0;
 
-    health.median_jitter = Math.round(medianJitter * 100) / 100;
+    health.median_jitter = isNaN(medianJitter) ? 0 : Math.round(medianJitter * 100) / 100;
 
     // Get latest test for current status
     const latest = db.prepare(`
@@ -1625,16 +1635,21 @@ app.get('/api/stats/trends', (req, res) => {
       ORDER BY date
     `).all(days);
 
-    // Calculate week-over-week changes
+    // Calculate week-over-week changes (with NaN protection)
     const currentWeek = trends.slice(-7);
     const previousWeek = trends.slice(-14, -7);
 
-    const avgCurrent = currentWeek.length > 0 ?
-      currentWeek.reduce((sum, d) => sum + parseFloat(d.avg_download), 0) / currentWeek.length : 0;
-    const avgPrevious = previousWeek.length > 0 ?
-      previousWeek.reduce((sum, d) => sum + parseFloat(d.avg_download), 0) / previousWeek.length : 0;
+    // Filter out invalid values and calculate averages safely
+    const validCurrent = currentWeek.filter(d => d.avg_download != null && !isNaN(parseFloat(d.avg_download)));
+    const validPrevious = previousWeek.filter(d => d.avg_download != null && !isNaN(parseFloat(d.avg_download)));
 
-    const weekOverWeekChange = avgPrevious > 0 ?
+    const avgCurrent = validCurrent.length > 0 ?
+      validCurrent.reduce((sum, d) => sum + parseFloat(d.avg_download), 0) / validCurrent.length : 0;
+    const avgPrevious = validPrevious.length > 0 ?
+      validPrevious.reduce((sum, d) => sum + parseFloat(d.avg_download), 0) / validPrevious.length : 0;
+
+    // Prevent division by zero and NaN propagation
+    const weekOverWeekChange = (avgPrevious > 0 && !isNaN(avgCurrent)) ?
       ((avgCurrent - avgPrevious) / avgPrevious * 100).toFixed(1) : 0;
 
     res.json({
