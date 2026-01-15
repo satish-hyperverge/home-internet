@@ -31,6 +31,15 @@ echo "$USER_EMAIL" > "$CONFIG_DIR/user_email"
 echo "Email saved: $USER_EMAIL"
 echo ""
 
+# Check for Xcode Command Line Tools (required for Swift compilation)
+if ! xcode-select -p &> /dev/null; then
+    echo "Installing Xcode Command Line Tools (required for Swift)..."
+    xcode-select --install
+    echo ""
+    echo "Please complete the Xcode CLT installation popup, then run this script again."
+    exit 1
+fi
+
 # Check for Homebrew
 if ! command -v brew &> /dev/null; then
     echo "Installing Homebrew..."
