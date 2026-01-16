@@ -212,29 +212,45 @@ class SpeedDataManager: ObservableObject {
         }
 
         let lines = content.components(separatedBy: "\n").filter { !$0.isEmpty }
+        guard lines.count >= 2 else { return }  // Need header + at least one data row
+
+        // Parse header to build column index map (prevents hardcoded index bugs)
+        let headerLine = lines[0]
+        let headers = headerLine.components(separatedBy: ",")
+        var columnIndex: [String: Int] = [:]
+        for (index, header) in headers.enumerated() {
+            columnIndex[header] = index
+        }
+
+        // Get last data line (skip if it's the header)
         guard let lastLine = lines.last, !lastLine.starts(with: "timestamp") else { return }
-
         let cols = lastLine.components(separatedBy: ",")
-        guard cols.count >= 27 else { return }
 
-        // Parse CSV columns based on v3.0 schema
-        // 0:timestamp_utc,1:device_id,2:os_version,3:app_version,4:timezone,5:interface,6:ssid,7:bssid,8:band,9:channel,10:width_mhz,11:rssi_dbm,12:noise_dbm,13:snr_db,14:tx_rate_mbps,15:local_ip,16:public_ip,17:latency_ms,18:jitter_ms,19:jitter_p50,20:jitter_p95,21:packet_loss_pct,22:download_mbps,23:upload_mbps,24:vpn_status,25:vpn_name,...
-        if let latency = Double(cols[17]) { lastLatency = latency }
-        if let jitter = Double(cols[18]) { lastJitter = jitter }
-        if let download = Double(cols[22]) { lastDownload = download }
-        if let upload = Double(cols[23]) { lastUpload = upload }
-        vpnStatus = cols[24]
+        // Helper to safely get column value by name
+        func getValue(_ columnName: String) -> String? {
+            guard let index = columnIndex[columnName], index < cols.count else { return nil }
+            return cols[index]
+        }
+
+        // Parse values using column names (schema-independent)
+        if let val = getValue("latency_ms"), let latency = Double(val) { lastLatency = latency }
+        if let val = getValue("jitter_ms"), let jitter = Double(val) { lastJitter = jitter }
+        if let val = getValue("download_mbps"), let download = Double(val) { lastDownload = download }
+        if let val = getValue("upload_mbps"), let upload = Double(val) { lastUpload = upload }
+        if let val = getValue("vpn_status") { vpnStatus = val }
 
         // Parse timestamp (try with and without fractional seconds)
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        if let date = formatter.date(from: cols[0]) {
-            lastTest = date
-        } else {
-            // Fallback: try with fractional seconds
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: cols[0]) {
+        if let timestampStr = getValue("timestamp_utc") ?? getValue("timestamp") {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: timestampStr) {
                 lastTest = date
+            } else {
+                // Fallback: try with fractional seconds
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let date = formatter.date(from: timestampStr) {
+                    lastTest = date
+                }
             }
         }
 

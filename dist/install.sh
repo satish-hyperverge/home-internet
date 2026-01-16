@@ -48,6 +48,23 @@ echo "Downloading speed monitor script..."
 curl -fsSL "https://raw.githubusercontent.com/hyperkishore/home-internet/main/speed_monitor.sh" -o "$BIN_DIR/speed_monitor.sh"
 chmod +x "$BIN_DIR/speed_monitor.sh"
 
+# Fix CSV header if it's out of sync (upgrade scenario)
+CSV_FILE="$SCRIPT_DIR/speed_log.csv"
+if [[ -f "$CSV_FILE" ]]; then
+    # Get expected header from the new script
+    EXPECTED_HEADER=$(grep "^CSV_HEADER=" "$BIN_DIR/speed_monitor.sh" | sed 's/CSV_HEADER="//' | sed 's/"$//')
+    CURRENT_HEADER=$(head -1 "$CSV_FILE")
+
+    if [[ "$EXPECTED_HEADER" != "$CURRENT_HEADER" ]]; then
+        echo "Updating CSV header to match new schema..."
+        cp "$CSV_FILE" "$CSV_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+        echo "$EXPECTED_HEADER" > "$CSV_FILE.new"
+        tail -n +2 "$CSV_FILE" >> "$CSV_FILE.new"
+        mv "$CSV_FILE.new" "$CSV_FILE"
+        echo "✓ CSV header updated (backup saved)"
+    fi
+fi
+
 # Optional: wifi_info Swift helper (backup for SpeedMonitor.app)
 # Only compile if Xcode CLT is available - not required since SpeedMonitor.app is primary
 if command -v swiftc &> /dev/null; then
