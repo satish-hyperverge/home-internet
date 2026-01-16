@@ -1,0 +1,145 @@
+#!/bin/bash
+# Monolithic Postinstall script for SpeedMonitor
+# Bundles all dependencies (speedtest-cli, wifi_info, SpeedMonitor.app)
+
+set +e
+
+LOG_FILE="/var/log/speedmonitor-install.log"
+INSTALL_DIR="/usr/local/speedmonitor"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+log "=== Speed Monitor Monolithic Postinstall Starting ==="
+
+# Load configuration
+if [ -f "${INSTALL_DIR}/lib/config.sh" ]; then
+    source "${INSTALL_DIR}/lib/config.sh"
+    log "Configuration loaded from config.sh"
+fi
+
+# Ensure bin directory exists
+mkdir -p "${INSTALL_DIR}/bin"
+
+# Set permissions for pre-compiled binaries
+log "Setting permissions for bundled binaries..."
+chmod +x "${INSTALL_DIR}/bin/speedtest-cli"
+chmod +x "${INSTALL_DIR}/bin/wifi_info"
+chmod +x "${INSTALL_DIR}/bin/speed_monitor.sh"
+
+# Note: SpeedMonitor.app is already pre-compiled in ${INSTALL_DIR}/lib/
+
+# Set up for all users
+log "Setting up Speed Monitor for all users..."
+
+for user_home in /Users/*; do
+    if [ ! -d "$user_home" ]; then
+        continue
+    fi
+
+    username=$(basename "$user_home")
+
+    # Skip system users
+    if [ "$username" = "Shared" ] || [ "$username" = "Guest" ]; then
+        continue
+    fi
+
+    log "Configuring for user: $username"
+
+    # Create directories
+    sudo -u "$username" mkdir -p "$user_home/${USER_DATA_DIR}"
+    sudo -u "$username" mkdir -p "$user_home/${USER_CONFIG_DIR}"
+    sudo -u "$username" mkdir -p "$user_home/${USER_BIN_DIR}"
+    sudo -u "$username" mkdir -p "$user_home/Library/LaunchAgents"
+
+    # Link scripts/binaries to user bin
+    sudo -u "$username" ln -sf "${INSTALL_DIR}/bin/speed_monitor.sh" "$user_home/${USER_BIN_DIR}/speed_monitor.sh"
+    sudo -u "$username" ln -sf "${INSTALL_DIR}/bin/wifi_info" "$user_home/${USER_BIN_DIR}/wifi_info"
+    sudo -u "$username" ln -sf "${INSTALL_DIR}/bin/speedtest-cli" "$user_home/${USER_BIN_DIR}/speedtest-cli"
+
+    # Generate device ID if not exists
+    if [ ! -f "$user_home/${USER_CONFIG_DIR}/device_id" ]; then
+        hw_uuid=$(ioreg -rd1 -c IOPlatformExpertDevice | awk '/IOPlatformUUID/ { print $3 }' | tr -d '"')
+        device_id=$(echo "$hw_uuid-$username" | shasum -a 256 | cut -c1-16)
+        echo "$device_id" | sudo -u "$username" tee "$user_home/${USER_CONFIG_DIR}/device_id" > /dev/null
+    fi
+
+    # Create LaunchAgent plist
+    cat > "$user_home/Library/LaunchAgents/com.speedmonitor.plist" << PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.speedmonitor</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$user_home/${USER_BIN_DIR}/speed_monitor.sh</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>600</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>$user_home/${USER_DATA_DIR}/launchd_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>$user_home/${USER_DATA_DIR}/launchd_stderr.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>$user_home/${USER_BIN_DIR}:/usr/local/speedmonitor/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>SPEED_MONITOR_SERVER</key>
+        <string>${SERVER_URL}</string>
+    </dict>
+</dict>
+</plist>
+PLIST_EOF
+
+    chown "$username" "$user_home/Library/LaunchAgents/com.speedmonitor.plist"
+
+    # Load LaunchAgent (only if user is logged in)
+    if pgrep -u "$username" &> /dev/null; then
+        sudo -u "$username" launchctl load "$user_home/Library/LaunchAgents/com.speedmonitor.plist" 2>/dev/null || true
+    fi
+
+    # Copy SpeedMonitor.app to Applications
+    if [ -d "${INSTALL_DIR}/lib/SpeedMonitor.app" ]; then
+        cp -r "${INSTALL_DIR}/lib/SpeedMonitor.app" "/Applications/"
+        log "Installed SpeedMonitor.app to /Applications"
+        
+        # Launch for current console user
+        CONSOLE_USER=$(stat -f "%Su" /dev/console)
+        if [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_USER" ]; then
+            # Prompt for email via GUI if not already set
+            USER_HOME=$(eval echo "~$CONSOLE_USER")
+            EMAIL_FILE="$USER_HOME/.config/nkspeedtest/user_email"
+            
+            if [ ! -f "$EMAIL_FILE" ]; then
+                log "Prompting $CONSOLE_USER for email..."
+                USER_EMAIL=$(sudo -u "$CONSOLE_USER" osascript <<EOT 2>/dev/null
+                    tell application "System Events"
+                        activate
+                        set theResponse to display dialog "Please enter your email for Speed Monitor results (optional):" default answer "" with title "Speed Monitor Setup" buttons {"Skip", "OK"} default button "OK"
+                        return text returned of theResponse
+                    end tell
+EOT
+)
+                if [ -n "$USER_EMAIL" ]; then
+                    mkdir -p "$(dirname "$EMAIL_FILE")"
+                    echo "$USER_EMAIL" > "$EMAIL_FILE"
+                    chown "$CONSOLE_USER:staff" "$EMAIL_FILE"
+                    log "Email saved for $CONSOLE_USER"
+                else
+                    log "Email prompt skipped or cancelled"
+                fi
+            fi
+
+            sudo -u "$CONSOLE_USER" open "/Applications/SpeedMonitor.app"
+            log "Launched SpeedMonitor.app for $CONSOLE_USER"
+        fi
+    fi
+done
+
+log "=== Monolithic Postinstall Complete ==="
+exit 0

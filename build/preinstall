@@ -1,0 +1,23 @@
+#!/bin/bash
+# Preinstall script for Monolithic SpeedMonitor
+set -e
+
+LOG_FILE="/var/log/speedmonitor-install.log"
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+log "=== Speed Monitor Monolithic Preinstall Starting ==="
+
+# Check macOS version
+OS_VERSION=$(sw_vers -productVersion)
+OS_MAJOR=$(echo "$OS_VERSION" | cut -d'.' -f1)
+log "macOS version: $OS_VERSION"
+
+if [ "$OS_MAJOR" -lt 11 ]; then
+    log "ERROR: macOS 11 (Big Sur) or later required"
+    exit 1
+fi
+
+log "=== Preinstall Complete ==="
+exit 0
