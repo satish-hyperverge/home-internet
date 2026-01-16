@@ -217,13 +217,13 @@ class SpeedDataManager: ObservableObject {
         let cols = lastLine.components(separatedBy: ",")
         guard cols.count >= 27 else { return }
 
-        // Parse CSV columns based on v2.1 schema
-        // timestamp,device_id,os_version,app_version,timezone,interface,ssid,bssid,band,channel,width,rssi,noise,snr,tx_rate,mcs,streams,local_ip,public_ip,latency,jitter,jitter_p50,jitter_p95,packet_loss,download,upload,vpn_status,vpn_name,...
-        if let latency = Double(cols[19]) { lastLatency = latency }
-        if let jitter = Double(cols[20]) { lastJitter = jitter }
-        if let download = Double(cols[24]) { lastDownload = download }
-        if let upload = Double(cols[25]) { lastUpload = upload }
-        vpnStatus = cols[26]
+        // Parse CSV columns based on v3.0 schema
+        // 0:timestamp_utc,1:device_id,2:os_version,3:app_version,4:timezone,5:interface,6:ssid,7:bssid,8:band,9:channel,10:width_mhz,11:rssi_dbm,12:noise_dbm,13:snr_db,14:tx_rate_mbps,15:local_ip,16:public_ip,17:latency_ms,18:jitter_ms,19:jitter_p50,20:jitter_p95,21:packet_loss_pct,22:download_mbps,23:upload_mbps,24:vpn_status,25:vpn_name,...
+        if let latency = Double(cols[17]) { lastLatency = latency }
+        if let jitter = Double(cols[18]) { lastJitter = jitter }
+        if let download = Double(cols[22]) { lastDownload = download }
+        if let upload = Double(cols[23]) { lastUpload = upload }
+        vpnStatus = cols[24]
 
         // Parse timestamp (try with and without fractional seconds)
         let formatter = ISO8601DateFormatter()
