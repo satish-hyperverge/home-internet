@@ -225,11 +225,17 @@ class SpeedDataManager: ObservableObject {
         if let upload = Double(cols[25]) { lastUpload = upload }
         vpnStatus = cols[26]
 
-        // Parse timestamp
+        // Parse timestamp (try with and without fractional seconds)
         let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        formatter.formatOptions = [.withInternetDateTime]
         if let date = formatter.date(from: cols[0]) {
             lastTest = date
+        } else {
+            // Fallback: try with fractional seconds
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: cols[0]) {
+                lastTest = date
+            }
         }
 
         // Check for updates
