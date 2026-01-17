@@ -205,14 +205,19 @@ class SpeedDataManager: ObservableObject {
         isUpdating = true
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            // Download and install latest SpeedMonitor.app
+            // Download, install, and relaunch in one script
+            // The script launches the new app BEFORE this process exits
             let script = """
             curl -fsSL "https://raw.githubusercontent.com/hyperkishore/home-internet/main/dist/SpeedMonitor.app.zip" -o /tmp/SpeedMonitor.app.zip && \
             unzip -o /tmp/SpeedMonitor.app.zip -d /tmp/ && \
             rm -rf /Applications/SpeedMonitor.app && \
             cp -r /tmp/SpeedMonitor.app /Applications/ && \
+            xattr -c /Applications/SpeedMonitor.app 2>/dev/null; \
+            find /Applications/SpeedMonitor.app -exec xattr -c {} \\; 2>/dev/null; \
             rm -f /tmp/SpeedMonitor.app.zip && \
-            rm -rf /tmp/SpeedMonitor.app
+            rm -rf /tmp/SpeedMonitor.app && \
+            sleep 1 && \
+            open /Applications/SpeedMonitor.app
             """
 
             let process = Process()
@@ -224,10 +229,8 @@ class SpeedDataManager: ObservableObject {
                 process.waitUntilExit()
 
                 if process.terminationStatus == 0 {
-                    // Relaunch the app
-                    DispatchQueue.main.async {
-                        let url = URL(fileURLWithPath: "/Applications/SpeedMonitor.app")
-                        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+                    // Exit after the script has launched the new app
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         NSApplication.shared.terminate(nil)
                     }
                 }
@@ -564,19 +567,20 @@ struct MenuBarView: View {
             Divider()
 
             // Actions
-            Button(action: { speedData.runSpeedTest() }) {
-                HStack {
-                    Image(systemName: speedData.isRunningTest ? "hourglass" : "bolt.fill")
-                    Text(speedData.isRunningTest ? "Running Test..." : "Run Speed Test")
+            Button(action: {
+                if speedData.isRunningTest {
+                    // If already running, just refresh display
+                    speedData.refresh()
+                    wifiManager.refresh()
+                } else {
+                    // Run speed test then refresh
+                    speedData.runSpeedTest()
+                    wifiManager.refresh()
                 }
-            }
-            .buttonStyle(.plain)
-            .disabled(speedData.isRunningTest)
-
-            Button(action: { speedData.refresh(); wifiManager.refresh() }) {
+            }) {
                 HStack {
-                    Image(systemName: "arrow.clockwise")
-                    Text("Refresh")
+                    Image(systemName: speedData.isRunningTest ? "hourglass" : "arrow.clockwise")
+                    Text(speedData.isRunningTest ? "Running Test..." : "Refresh")
                 }
             }
             .buttonStyle(.plain)
