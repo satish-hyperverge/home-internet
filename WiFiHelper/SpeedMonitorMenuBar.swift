@@ -154,8 +154,10 @@ class SpeedDataManager: ObservableObject {
     @Published var updateAvailable: Bool = false
     @Published var isRunningTest: Bool = false
     @Published var isUpdating: Bool = false
+    @Published var testCountdown: Int = 0
 
     private var refreshTimer: Timer?
+    private var countdownTimer: Timer?
 
     init() {
         refresh()
@@ -175,6 +177,15 @@ class SpeedDataManager: ObservableObject {
     func runSpeedTest() {
         guard !isRunningTest else { return }
         isRunningTest = true
+        testCountdown = 30  // Start countdown at 30 seconds
+
+        // Start countdown timer on main thread
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            if self.testCountdown > 0 {
+                self.testCountdown -= 1
+            }
+        }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let scriptPath = NSHomeDirectory() + "/.local/bin/speed_monitor.sh"
@@ -194,6 +205,9 @@ class SpeedDataManager: ObservableObject {
             }
 
             DispatchQueue.main.async {
+                self?.countdownTimer?.invalidate()
+                self?.countdownTimer = nil
+                self?.testCountdown = 0
                 self?.isRunningTest = false
                 self?.refresh()
             }
@@ -598,7 +612,11 @@ struct MenuBarView: View {
             }) {
                 HStack {
                     Image(systemName: speedData.isRunningTest ? "hourglass" : "arrow.clockwise")
-                    Text(speedData.isRunningTest ? "Running Test..." : "Refresh")
+                    if speedData.isRunningTest {
+                        Text("Running... (\(speedData.testCountdown)s)")
+                    } else {
+                        Text("Refresh")
+                    }
                 }
             }
             .buttonStyle(.plain)
