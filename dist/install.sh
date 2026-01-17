@@ -20,24 +20,56 @@ mkdir -p "$SCRIPT_DIR" "$BIN_DIR" "$CONFIG_DIR"
 # Collect user email
 # When running via 'curl | bash', stdin is not a tty, so we need to read from /dev/tty
 echo "Please enter your Hyperverge email address:"
-if [[ -t 0 ]]; then
-    # Interactive mode - stdin is a terminal
-    read -p "Email: " USER_EMAIL
-else
-    # Non-interactive (curl | bash) - read from /dev/tty
-    read -p "Email: " USER_EMAIL < /dev/tty
-fi
+echo "(This is required to identify your device in the dashboard)"
+echo ""
 
-# Validate email format (basic check)
-if [[ -z "$USER_EMAIL" ]]; then
-    echo "Error: Email is required. Please run the installer again."
-    echo "Tip: Run with: bash <(curl -fsSL URL)"
+USER_EMAIL=""
+MAX_ATTEMPTS=3
+ATTEMPT=0
+
+while [[ $ATTEMPT -lt $MAX_ATTEMPTS ]]; do
+    ATTEMPT=$((ATTEMPT + 1))
+
+    if [[ -t 0 ]]; then
+        # Interactive mode - stdin is a terminal
+        read -p "Email: " USER_EMAIL
+    else
+        # Non-interactive (curl | bash) - read from /dev/tty
+        read -p "Email: " USER_EMAIL < /dev/tty 2>/dev/null || {
+            echo "Error: Cannot read input. Please run the installer differently:"
+            echo "  bash <(curl -fsSL https://raw.githubusercontent.com/hyperkishore/home-internet/main/dist/install.sh)"
+            exit 1
+        }
+    fi
+
+    # Trim whitespace
+    USER_EMAIL=$(echo "$USER_EMAIL" | xargs)
+
+    # Check if empty
+    if [[ -z "$USER_EMAIL" ]]; then
+        echo "❌ Email cannot be empty. Please try again. (Attempt $ATTEMPT/$MAX_ATTEMPTS)"
+        continue
+    fi
+
+    # Validate email format
+    if [[ ! "$USER_EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+        echo "❌ Invalid email format. Please enter a valid email. (Attempt $ATTEMPT/$MAX_ATTEMPTS)"
+        continue
+    fi
+
+    # Valid email - break out of loop
+    break
+done
+
+# Final check after all attempts
+if [[ -z "$USER_EMAIL" ]] || [[ ! "$USER_EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+    echo ""
+    echo "❌ Error: A valid email address is required to proceed."
+    echo "Please run the installer again and provide your email."
     exit 1
 fi
 
-if [[ ! "$USER_EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
-    echo "Warning: Email format looks invalid, but continuing anyway..."
-fi
+echo "✓ Email validated: $USER_EMAIL"
 
 # Store email
 echo "$USER_EMAIL" > "$CONFIG_DIR/user_email"
