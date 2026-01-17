@@ -79,13 +79,15 @@ echo ""
 # Check for Homebrew
 if ! command -v brew &> /dev/null; then
     echo "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    # Use /dev/null for stdin to prevent consuming piped script
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/null
 fi
 
 # Install speedtest-cli
 if ! command -v speedtest-cli &> /dev/null; then
     echo "Installing speedtest-cli..."
-    brew install speedtest-cli
+    # Use /dev/null for stdin to prevent consuming piped script
+    brew install speedtest-cli < /dev/null
 fi
 
 # Download the speed monitor script
