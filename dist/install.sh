@@ -134,8 +134,11 @@ if [[ -f /tmp/SpeedMonitor.app.zip ]]; then
     if [[ -d /tmp/SpeedMonitor.app ]]; then
         cp -r /tmp/SpeedMonitor.app /Applications/
 
-        # Remove quarantine flag (Gatekeeper) and ad-hoc sign
-        xattr -cr /Applications/SpeedMonitor.app 2>/dev/null || true
+        # Remove quarantine flag (Gatekeeper) - use find since -r not supported on all macOS
+        xattr -c /Applications/SpeedMonitor.app 2>/dev/null || true
+        find /Applications/SpeedMonitor.app -exec xattr -c {} \; 2>/dev/null || true
+
+        # Ad-hoc code sign
         codesign --force --deep --sign - /Applications/SpeedMonitor.app 2>/dev/null || true
 
         echo "✓ SpeedMonitor.app installed to /Applications"
@@ -217,7 +220,13 @@ EOF
     launchctl load "$HOME/Library/LaunchAgents/$MENUBAR_PLIST_NAME"
 
     # Also launch the app now
-    open /Applications/SpeedMonitor.app
+    if ! open /Applications/SpeedMonitor.app 2>/dev/null; then
+        echo ""
+        echo "⚠️  Could not auto-open SpeedMonitor.app (macOS security)"
+        echo "   Please open it manually:"
+        echo "   1. Open Finder → Applications → Right-click SpeedMonitor → Open"
+        echo "   2. Or run: open /Applications/SpeedMonitor.app"
+    fi
 fi
 
 # Run the first speed test immediately so menu bar shows real data
