@@ -380,6 +380,34 @@ app.get('/api/version', (req, res) => {
   });
 });
 
+// Serve installer .command file (opens Terminal on macOS when clicked)
+app.get('/install.command', (req, res) => {
+  const script = `#!/bin/bash
+# Speed Monitor Installer
+# This file opens Terminal and runs the installer
+
+clear
+echo "==========================================="
+echo "   Speed Monitor - One-Click Installer"
+echo "==========================================="
+echo ""
+
+# Run the actual installer
+curl -fsSL https://raw.githubusercontent.com/hyperkishore/home-internet/main/dist/install.sh | bash
+
+echo ""
+echo "==========================================="
+echo "   Installation complete!"
+echo "   You can close this window."
+echo "==========================================="
+read -p "Press Enter to close..."
+`;
+
+  res.setHeader('Content-Type', 'application/x-sh');
+  res.setHeader('Content-Disposition', 'attachment; filename="SpeedMonitor-Install.command"');
+  res.send(script);
+});
+
 // API: Get all results (with pagination)
 app.get('/api/results', (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 1000);
