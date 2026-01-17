@@ -56,6 +56,10 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << EOF
     <string>Speed Monitor needs Location Services to detect your WiFi network name (SSID). This is required by macOS. Your location is never tracked or stored.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Speed Monitor needs Location Services to detect your WiFi network name (SSID). This is required by macOS. Your location is never tracked or stored.</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>Speed Monitor needs Location Services to detect your WiFi network name (SSID). This is required by macOS. Your location is never tracked or stored.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Speed Monitor needs Location Services to detect your WiFi network name (SSID). This is required by macOS. Your location is never tracked or stored.</string>
 </dict>
 </plist>
 EOF

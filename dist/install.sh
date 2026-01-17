@@ -18,10 +18,23 @@ echo ""
 mkdir -p "$SCRIPT_DIR" "$BIN_DIR" "$CONFIG_DIR"
 
 # Collect user email
+# When running via 'curl | bash', stdin is not a tty, so we need to read from /dev/tty
 echo "Please enter your Hyperverge email address:"
-read -p "Email: " USER_EMAIL
+if [[ -t 0 ]]; then
+    # Interactive mode - stdin is a terminal
+    read -p "Email: " USER_EMAIL
+else
+    # Non-interactive (curl | bash) - read from /dev/tty
+    read -p "Email: " USER_EMAIL < /dev/tty
+fi
 
 # Validate email format (basic check)
+if [[ -z "$USER_EMAIL" ]]; then
+    echo "Error: Email is required. Please run the installer again."
+    echo "Tip: Run with: bash <(curl -fsSL URL)"
+    exit 1
+fi
+
 if [[ ! "$USER_EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
     echo "Warning: Email format looks invalid, but continuing anyway..."
 fi
@@ -86,6 +99,11 @@ if [[ -f /tmp/SpeedMonitor.app.zip ]]; then
     unzip -o /tmp/SpeedMonitor.app.zip -d /tmp/
     if [[ -d /tmp/SpeedMonitor.app ]]; then
         cp -r /tmp/SpeedMonitor.app /Applications/
+
+        # Remove quarantine flag (Gatekeeper) and ad-hoc sign
+        xattr -cr /Applications/SpeedMonitor.app 2>/dev/null || true
+        codesign --force --deep --sign - /Applications/SpeedMonitor.app 2>/dev/null || true
+
         echo "✓ SpeedMonitor.app installed to /Applications"
     else
         echo "✗ Failed to unzip SpeedMonitor.app"

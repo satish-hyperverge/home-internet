@@ -8,21 +8,60 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published var permissionRequested = false
+    @Published var lastError: String?
 
     override init() {
         super.init()
         manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyReduced  // We only need WiFi, not precise location
         authorizationStatus = manager.authorizationStatus
+
+        // If already authorized, start monitoring to keep permission active
+        if isAuthorized {
+            manager.startUpdatingLocation()
+        }
     }
 
     func requestPermission() {
         permissionRequested = true
-        manager.requestWhenInUseAuthorization()
+        lastError = nil
+
+        // On macOS, we need to start location updates to trigger the permission dialog
+        // This is because menu bar apps (LSUIElement) may not show the dialog otherwise
+        manager.startUpdatingLocation()
+
+        // Request authorization - on macOS, requestAlwaysAuthorization is more reliable
+        // for background/menu bar apps
+        if #available(macOS 10.15, *) {
+            manager.requestAlwaysAuthorization()
+        } else {
+            manager.requestWhenInUseAuthorization()
+        }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         DispatchQueue.main.async {
             self.authorizationStatus = manager.authorizationStatus
+
+            // Start updates if authorized (keeps permission active)
+            if self.isAuthorized {
+                manager.startUpdatingLocation()
+            } else {
+                manager.stopUpdatingLocation()
+            }
+        }
+    }
+
+    // We don't actually need location data, but implementing this keeps the permission active
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        // We only need CoreLocation for WiFi SSID access, not actual location
+        // Stop updates after first success to save battery
+        manager.stopUpdatingLocation()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        DispatchQueue.main.async {
+            self.lastError = error.localizedDescription
         }
     }
 
@@ -323,24 +362,49 @@ struct SettingsView: View {
                     }
 
                     if !locationManager.isAuthorized {
-                        Text("Location Services is required to detect your WiFi network name (SSID).")
+                        Text("Location Services is required to detect your WiFi network name (SSID). macOS requires this permission for any app reading WiFi details.")
                             .font(.caption)
                             .foregroundColor(.secondary)
+
+                        if let error = locationManager.lastError {
+                            Text("Error: \(error)")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
 
                         if locationManager.authorizationStatus == .notDetermined {
                             Button("Grant Permission") {
                                 locationManager.requestPermission()
                             }
                             .buttonStyle(.borderedProminent)
-                        } else {
+
+                            Text("A system dialog should appear. If not, click 'Open System Settings' below.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted || locationManager.permissionRequested {
                             Button("Open System Settings") {
+                                // Open Privacy & Security → Location Services directly
                                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
                                     NSWorkspace.shared.open(url)
                                 }
                             }
-                            Text("Enable for 'Speed Monitor' then restart app")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Steps to enable:")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                Text("1. Enable 'Location Services' at the top")
+                                    .font(.caption)
+                                Text("2. Scroll down and find 'Speed Monitor'")
+                                    .font(.caption)
+                                Text("3. Toggle it ON")
+                                    .font(.caption)
+                                Text("4. Restart this app")
+                                    .font(.caption)
+                            }
+                            .foregroundColor(.secondary)
                         }
                     } else {
                         HStack {
@@ -349,6 +413,10 @@ struct SettingsView: View {
                             Text(wifiManager.ssid)
                                 .fontWeight(.medium)
                         }
+
+                        Text("✓ WiFi SSID detection is working")
+                            .font(.caption)
+                            .foregroundColor(.green)
                     }
                 }
                 .padding(.vertical, 8)
