@@ -456,6 +456,7 @@ struct MenuBarView: View {
     @ObservedObject var wifiManager: WiFiManager
     @ObservedObject var locationManager: LocationManager
     @State private var showingSettings = false
+    @State private var isPulsing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -612,12 +613,24 @@ struct MenuBarView: View {
 
             Button(action: { speedData.updateApp() }) {
                 HStack {
-                    Image(systemName: speedData.isUpdating ? "hourglass" : "arrow.down.circle")
-                    Text(speedData.isUpdating ? "Updating..." : "Update App")
+                    Image(systemName: speedData.isUpdating ? "hourglass" : "arrow.down.circle.fill")
+                        .foregroundColor(speedData.updateAvailable ? .blue : .primary)
+                    Text(speedData.isUpdating ? "Updating..." : (speedData.updateAvailable ? "Update Available!" : "Update App"))
+                        .fontWeight(speedData.updateAvailable ? .semibold : .regular)
                 }
+                .opacity(speedData.updateAvailable ? (isPulsing ? 1.0 : 0.5) : 1.0)
+                .animation(speedData.updateAvailable ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default, value: isPulsing)
             }
             .buttonStyle(.plain)
             .disabled(speedData.isUpdating)
+            .onAppear {
+                if speedData.updateAvailable {
+                    isPulsing = true
+                }
+            }
+            .onChange(of: speedData.updateAvailable) { newValue in
+                isPulsing = newValue
+            }
 
             Divider()
 
