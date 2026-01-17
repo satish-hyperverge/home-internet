@@ -523,9 +523,27 @@ struct MenuBarView: View {
                         .foregroundColor(.cyan)
                     Text("Network:")
                     Spacer()
-                    Text(locationManager.isAuthorized ? wifiManager.ssid : "(Location required)")
-                        .foregroundColor(locationManager.isAuthorized ? .primary : .secondary)
-                        .font(locationManager.isAuthorized ? .body : .caption)
+                    if locationManager.isAuthorized {
+                        Text(wifiManager.ssid)
+                    } else {
+                        Button(action: {
+                            // First try to request permission (shows dialog if not determined)
+                            if locationManager.authorizationStatus == .notDetermined {
+                                locationManager.requestPermission()
+                            } else {
+                                // Already denied - open System Settings
+                                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                        }) {
+                            Text("(Location required)")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                                .underline()
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
 
                 if locationManager.isAuthorized && wifiManager.isConnected {
