@@ -9,11 +9,39 @@
 4. `WiFiHelper/SpeedMonitorMenuBar.swift` - `appVersion` constant AND Settings "About" section
 5. `dist/install.sh` - Version in comments/echo statements
 6. This file (`CLAUDE.md`) - Header and any version references
+7. **`dist/SpeedMonitor.app.zip`** - MUST be rebuilt (see below)
 
 **Version format:** `MAJOR.MINOR.PATCH` (e.g., 3.1.0)
 - PATCH: Bug fixes
 - MINOR: New features
 - MAJOR: Breaking changes
+
+## CRITICAL: Distribution Artifact
+
+**The "Update App" button downloads from GitHub, NOT from the server.**
+
+Users clicking "Update App" in the menu bar download:
+```
+https://raw.githubusercontent.com/hyperkishore/home-internet/main/dist/SpeedMonitor.app.zip
+```
+
+**EVERY time you change the menu bar app, you MUST:**
+```bash
+# 1. Rebuild the app
+cd WiFiHelper && ./build.sh
+
+# 2. Create new zip
+cd .. && rm -f dist/SpeedMonitor.app.zip
+cd WiFiHelper/build && zip -r ../../dist/SpeedMonitor.app.zip SpeedMonitor.app
+
+# 3. Verify version in zip
+unzip -p dist/SpeedMonitor.app.zip SpeedMonitor.app/Contents/MacOS/SpeedMonitor | strings | grep -E "^3\.[0-9]+\.[0-9]+"
+
+# 4. Commit the zip with your changes
+git add dist/SpeedMonitor.app.zip
+```
+
+**If you forget this step, users will download the OLD version when they click "Update App".**
 
 ---
 
