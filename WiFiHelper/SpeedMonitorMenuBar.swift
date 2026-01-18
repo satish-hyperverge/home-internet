@@ -407,7 +407,7 @@ class SpeedDataManager: ObservableObject {
         checkForUpdate()
     }
 
-    static let appVersion = "3.1.05"
+    static let appVersion = "3.1.06"
 
     func checkForUpdate() {
         let versionURL = URL(string: "https://home-internet-production.up.railway.app/api/version")!
@@ -782,6 +782,9 @@ struct MenuBarView: View {
 
             // Actions
             Button(action: {
+                // Always check for updates immediately
+                speedData.checkForUpdate()
+
                 if speedData.isRunningTest {
                     // If already running, just refresh display
                     speedData.refresh()
