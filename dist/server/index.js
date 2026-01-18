@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.1.1';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
