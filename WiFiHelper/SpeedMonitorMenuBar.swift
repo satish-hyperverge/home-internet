@@ -274,28 +274,40 @@ class SpeedDataManager: ObservableObject {
         isUpdating = true
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            // Download, install, and relaunch in one script
-            // IMPORTANT: Only delete old app AFTER new one is verified
+            // Download and prepare update - launch happens in background AFTER this app exits
             let script = """
             set -e
-            echo "Downloading update..."
+
+            # Download
             curl -fsSL "https://raw.githubusercontent.com/hyperkishore/home-internet/main/dist/SpeedMonitor.app.zip" -o /tmp/SpeedMonitor.app.zip
-            echo "Extracting..."
+
+            # Extract
+            rm -rf /tmp/SpeedMonitor.app
             unzip -o /tmp/SpeedMonitor.app.zip -d /tmp/
-            if [ ! -d "/tmp/SpeedMonitor.app" ]; then
-                echo "ERROR: Download failed"
+
+            # Verify download succeeded
+            if [ ! -d "/tmp/SpeedMonitor.app" ] || [ ! -f "/tmp/SpeedMonitor.app/Contents/MacOS/SpeedMonitor" ]; then
+                echo "ERROR: Download or extract failed"
                 exit 1
             fi
-            echo "Installing..."
+
+            # Install: remove old, copy new
             rm -rf /Applications/SpeedMonitor.app
             cp -r /tmp/SpeedMonitor.app /Applications/
-            xattr -c /Applications/SpeedMonitor.app 2>/dev/null || true
-            find /Applications/SpeedMonitor.app -exec xattr -c {} \\; 2>/dev/null || true
+
+            # Remove quarantine and sign
+            xattr -cr /Applications/SpeedMonitor.app 2>/dev/null || true
+            codesign --force --deep --sign - /Applications/SpeedMonitor.app 2>/dev/null || true
+
+            # Cleanup
             rm -f /tmp/SpeedMonitor.app.zip
             rm -rf /tmp/SpeedMonitor.app
-            echo "Launching..."
-            sleep 1
-            open /Applications/SpeedMonitor.app
+
+            # Launch new app in background (nohup ensures it survives parent exit)
+            nohup /Applications/SpeedMonitor.app/Contents/MacOS/SpeedMonitor &>/dev/null &
+
+            # Small delay to let new app start
+            sleep 2
             """
 
             let process = Process()
@@ -307,17 +319,21 @@ class SpeedDataManager: ObservableObject {
                 process.waitUntilExit()
 
                 if process.terminationStatus == 0 {
-                    // Exit after the script has launched the new app
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // Exit this instance - new app is already running
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         NSApplication.shared.terminate(nil)
+                    }
+                } else {
+                    // Update failed - reset state
+                    DispatchQueue.main.async {
+                        self?.isUpdating = false
                     }
                 }
             } catch {
                 print("Failed to update app: \(error)")
-            }
-
-            DispatchQueue.main.async {
-                self?.isUpdating = false
+                DispatchQueue.main.async {
+                    self?.isUpdating = false
+                }
             }
         }
     }
