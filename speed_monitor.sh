@@ -9,7 +9,7 @@
 # v2.1.0: Added WiFi debugging metrics (MCS, error rates, BSSID tracking)
 #
 
-APP_VERSION="3.1.11"
+APP_VERSION="3.1.12"
 
 # Configuration
 DATA_DIR="$HOME/.local/share/nkspeedtest"
@@ -756,9 +756,20 @@ collect_metrics() {
     log "Running ping test for jitter..."
     eval $(run_ping_test)
 
-    # Speed test
+    # Speed test with proxy support and timeout
     log "Running speed test..."
-    local speedtest_output=$(speedtest-cli --simple 2>&1)
+
+    # Try to detect system proxy (macOS)
+    local http_proxy_val=$(scutil --proxy 2>/dev/null | grep "HTTPProxy" | awk '{print $3}')
+    local http_port_val=$(scutil --proxy 2>/dev/null | grep "HTTPPort" | awk '{print $3}')
+    if [[ -n "$http_proxy_val" && -n "$http_port_val" ]]; then
+        export http_proxy="http://${http_proxy_val}:${http_port_val}"
+        export https_proxy="http://${http_proxy_val}:${http_port_val}"
+        log "Using system proxy: $http_proxy"
+    fi
+
+    # Run speedtest with 90 second timeout
+    local speedtest_output=$(timeout 90 speedtest-cli --simple 2>&1)
     local speedtest_exit=$?
 
     if [[ $speedtest_exit -eq 0 ]]; then
@@ -767,13 +778,31 @@ collect_metrics() {
         UPLOAD_MBPS=$(echo "$speedtest_output" | grep "Upload:" | awk '{print $2}')
         STATUS="success"
         log "Speed test completed - Down: ${DOWNLOAD_MBPS} Mbps, Up: ${UPLOAD_MBPS} Mbps"
+    elif [[ $speedtest_exit -eq 124 ]]; then
+        # Timeout (exit code 124 from timeout command)
+        LATENCY_MS="0"
+        DOWNLOAD_MBPS="0"
+        UPLOAD_MBPS="0"
+        STATUS="timeout"
+        if [[ "$VPN_STATUS" == "connected" ]]; then
+            errors="vpn_blocking_speedtest"
+            log "Speed test timed out - VPN may be blocking. Try browser speedtest.net"
+        else
+            errors="speedtest_timeout"
+            log "Speed test timed out after 90 seconds"
+        fi
     else
         LATENCY_MS="0"
         DOWNLOAD_MBPS="0"
         UPLOAD_MBPS="0"
         STATUS="failed"
-        errors="speedtest_failed"
-        log "Speed test failed: $speedtest_output"
+        if [[ "$VPN_STATUS" == "connected" ]]; then
+            errors="vpn_blocking_speedtest"
+            log "Speed test failed with VPN - corporate policy may be blocking. Output: $speedtest_output"
+        else
+            errors="speedtest_failed"
+            log "Speed test failed: $speedtest_output"
+        fi
     fi
 
     # Set defaults for any missing values

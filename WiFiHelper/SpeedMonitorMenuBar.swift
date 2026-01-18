@@ -180,6 +180,8 @@ class SpeedDataManager: ObservableObject {
     @Published var lastJitter: Double = 0
     @Published var lastTest: Date?
     @Published var vpnStatus: String = ""
+    @Published var lastError: String = ""
+    @Published var lastStatus: String = ""
     @Published var updateAvailable: Bool = false
     @Published var isRunningTest: Bool = false
     @Published var isUpdating: Bool = false
@@ -409,6 +411,18 @@ class SpeedDataManager: ObservableObject {
         if let val = getValue("download_mbps"), let download = Double(val) { lastDownload = download }
         if let val = getValue("upload_mbps"), let upload = Double(val) { lastUpload = upload }
         if let val = getValue("vpn_status") { vpnStatus = val }
+        if let val = getValue("errors") { lastError = val }
+
+        // Determine status based on download speed and errors
+        if lastDownload > 0 {
+            lastStatus = "success"
+        } else if lastError.contains("vpn_blocking") {
+            lastStatus = "vpn_blocked"
+        } else if lastError.contains("timeout") {
+            lastStatus = "timeout"
+        } else if !lastError.isEmpty {
+            lastStatus = "failed"
+        }
 
         // Parse timestamp (try with and without fractional seconds)
         if let timestampStr = getValue("timestamp_utc") ?? getValue("timestamp") {
@@ -429,7 +443,7 @@ class SpeedDataManager: ObservableObject {
         checkForUpdate()
     }
 
-    static let appVersion = "3.1.11"
+    static let appVersion = "3.1.12"
 
     func checkForUpdate() {
         let versionURL = URL(string: "https://home-internet-production.up.railway.app/api/version")!
@@ -959,18 +973,33 @@ struct MenuBarView: View {
                 .disabled(speedData.isRepairing)
             }
 
-            // VPN warning banner
-            if speedData.vpnStatus == "connected" && speedData.lastDownload == 0 {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.white)
-                    Text("VPN may be blocking speed tests")
-                        .fontWeight(.medium)
+            // VPN blocking banner
+            if speedData.lastStatus == "vpn_blocked" || (speedData.vpnStatus == "connected" && speedData.lastDownload == 0) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: "building.2.fill")
+                            .foregroundColor(.white)
+                        Text("Corporate IT Policy Blocking")
+                            .fontWeight(.medium)
+                        Spacer()
+                    }
+                    Text("VPN is preventing speed tests from running.")
+                        .font(.caption2)
+                    Button(action: {
+                        if let url = URL(string: "https://www.speedtest.net") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }) {
+                        Text("→ Try speedtest.net in browser")
+                            .font(.caption2)
+                            .underline()
+                    }
+                    .buttonStyle(.plain)
                 }
                 .font(.caption)
                 .foregroundColor(.white)
                 .padding(8)
-                .background(Color.red.opacity(0.8))
+                .background(Color.red.opacity(0.85))
                 .cornerRadius(6)
             }
 
