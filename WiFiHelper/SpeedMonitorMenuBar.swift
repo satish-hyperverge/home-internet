@@ -407,7 +407,7 @@ class SpeedDataManager: ObservableObject {
         checkForUpdate()
     }
 
-    static let appVersion = "3.1.04"
+    static let appVersion = "3.1.05"
 
     func checkForUpdate() {
         let versionURL = URL(string: "https://home-internet-production.up.railway.app/api/version")!
@@ -416,13 +416,26 @@ class SpeedDataManager: ObservableObject {
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let serverVersion = json["version"] as? String else { return }
 
-            // Compare app's built-in version with server version
+            // Compare app's built-in version with server version using semantic versioning
             let localVersion = SpeedDataManager.appVersion
             DispatchQueue.main.async {
-                // Update available if server version is newer (simple string comparison works for semver)
-                self?.updateAvailable = serverVersion > localVersion
+                self?.updateAvailable = Self.isNewerVersion(serverVersion, than: localVersion)
             }
         }.resume()
+    }
+
+    /// Compare semantic versions numerically (e.g., "3.1.04" > "3.1.2")
+    static func isNewerVersion(_ v1: String, than v2: String) -> Bool {
+        let parts1 = v1.split(separator: ".").compactMap { Int($0) }
+        let parts2 = v2.split(separator: ".").compactMap { Int($0) }
+
+        for i in 0..<max(parts1.count, parts2.count) {
+            let p1 = i < parts1.count ? parts1[i] : 0
+            let p2 = i < parts2.count ? parts2[i] : 0
+            if p1 > p2 { return true }
+            if p1 < p2 { return false }
+        }
+        return false  // Equal versions
     }
 
     var timeSinceTest: String {
