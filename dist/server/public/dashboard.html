@@ -418,6 +418,11 @@
             cursor: pointer;
         }
 
+        #deviceFilter {
+            min-width: 200px;
+            max-width: 300px;
+        }
+
         .chart-container {
             position: relative;
             height: 280px;
@@ -1511,11 +1516,18 @@
                 </div>
                 <div class="chart-controls">
                     <select id="chartTimeRange" onchange="loadChartData()">
+                        <option value="0.25">Last 15 minutes</option>
+                        <option value="0.5">Last 30 minutes</option>
+                        <option value="1">Last 1 hour</option>
+                        <option value="3">Last 3 hours</option>
                         <option value="6">Last 6 hours</option>
-                        <option value="12">Last 12 hours</option>
                         <option value="24" selected>Last 24 hours</option>
-                        <option value="48">Last 2 days</option>
+                        <option value="72">Last 3 days</option>
+                        <option value="120">Last 5 days</option>
                         <option value="168">Last 7 days</option>
+                    </select>
+                    <select id="deviceFilter" onchange="loadChartData()">
+                        <option value="all">Select All (Aggregated)</option>
                     </select>
                 </div>
             </div>
@@ -1860,6 +1872,7 @@
 
         async function loadChartData() {
             const hours = document.getElementById('chartTimeRange').value;
+            const selectedDevice = document.getElementById('deviceFilter').value;
 
             try {
                 const response = await fetch(`/api/stats/timeline?hours=${hours}`);
@@ -1871,24 +1884,105 @@
                     download: Math.round(d.download_mbps),
                     upload: Math.round(d.upload_mbps),
                     user: d.user_email || d.device_id.slice(0, 12) + '...',
+                    device_id: d.device_id,
                     latency: Math.round(d.latency_ms),
                     jitter: d.jitter_ms ? d.jitter_ms.toFixed(1) : null,
                     vpn: d.vpn_status === 'connected' ? d.vpn_name : 'Disconnected',
                     ssid: d.ssid
                 }));
 
-                const downloadData = mappedData.map(d => ({ x: new Date(d.timestamp), y: d.download }));
-                const uploadData = mappedData.map(d => ({ x: new Date(d.timestamp), y: d.upload }));
+                let filteredData;
+                let chartTitle;
+
+                if (selectedDevice === 'all') {
+                    // Aggregate all devices (current behavior)
+                    filteredData = mappedData;
+                    chartTitle = 'All Devices (Aggregated)';
+                } else {
+                    // Filter to single device
+                    filteredData = mappedData.filter(d => d.device_id === selectedDevice);
+                    const deviceName = filteredData.length > 0 ? filteredData[0].user : 'Unknown Device';
+                    chartTitle = `Device: ${deviceName}`;
+                }
+
+                const downloadData = filteredData.map(d => ({
+                    x: new Date(d.timestamp),
+                    y: d.download,
+                    user: d.user,
+                    latency: d.latency,
+                    jitter: d.jitter,
+                    vpn: d.vpn,
+                    ssid: d.ssid
+                }));
+
+                const uploadData = filteredData.map(d => ({
+                    x: new Date(d.timestamp),
+                    y: d.upload,
+                    user: d.user,
+                    latency: d.latency,
+                    jitter: d.jitter,
+                    vpn: d.vpn,
+                    ssid: d.ssid
+                }));
 
                 speedChart.data.datasets[0].data = downloadData;
                 speedChart.data.datasets[1].data = uploadData;
+
+                // Update chart title
+                speedChart.options.plugins.title = {
+                    display: selectedDevice !== 'all',
+                    text: chartTitle,
+                    color: '#94a3b8',
+                    font: { size: 14 }
+                };
+
                 speedChart.update();
 
                 // Store for scrubbing
-                originalChartData = mappedData;
+                originalChartData = filteredData;
 
             } catch (err) {
                 console.error('Failed to load chart data:', err);
+            }
+        }
+
+        async function loadDeviceList() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+
+                const deviceSelect = document.getElementById('deviceFilter');
+                if (!deviceSelect) return;
+
+                // Store current selection
+                const currentSelection = deviceSelect.value;
+
+                // Keep "Select All" as first option
+                deviceSelect.innerHTML = '<option value="all">Select All (Aggregated)</option>';
+
+                // Sort devices by email/device_id
+                const devices = (data.devices || []).sort((a, b) => {
+                    const nameA = a.user_email || a.device_id;
+                    const nameB = b.user_email || b.device_id;
+                    return nameA.localeCompare(nameB);
+                });
+
+                // Add each device as an option
+                devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.device_id;
+                    const displayName = device.user_email || device.device_id.slice(0, 12) + '...';
+                    option.textContent = displayName;
+                    deviceSelect.appendChild(option);
+                });
+
+                // Restore previous selection if it still exists
+                if (currentSelection && Array.from(deviceSelect.options).some(opt => opt.value === currentSelection)) {
+                    deviceSelect.value = currentSelection;
+                }
+
+            } catch (err) {
+                console.error('Failed to load device list:', err);
             }
         }
 
@@ -3063,12 +3157,14 @@
 
         // Load data on start
         loadAllData();
+        loadDeviceList();
         loadChartData();
         loadWiFiData();
 
         // Auto-refresh every 30 seconds
         setInterval(() => {
             loadAllData();
+            loadDeviceList();
             loadChartData();
             loadWiFiData();
         }, 30000);

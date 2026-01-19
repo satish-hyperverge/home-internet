@@ -1012,7 +1012,7 @@ app.get('/api/my/:email', (req, res) => {
 
 // API: Speed timeline (all devices, for chart)
 app.get('/api/stats/timeline', (req, res) => {
-  const hours = Math.min(parseInt(req.query.hours) || 24, 168); // Max 7 days
+  const hours = Math.min(parseFloat(req.query.hours) || 24, 168); // Max 7 days, supports fractional hours
 
   try {
     const timeline = db.prepare(`
