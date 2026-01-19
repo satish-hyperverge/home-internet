@@ -9,7 +9,7 @@
 # v2.1.0: Added WiFi debugging metrics (MCS, error rates, BSSID tracking)
 #
 
-APP_VERSION="3.1.15"
+APP_VERSION="3.1.16"
 
 # Configuration
 DATA_DIR="$HOME/.local/share/nkspeedtest"
@@ -175,6 +175,32 @@ case "${1:-}" in
         exit 0
         ;;
 esac
+
+# macOS-compatible timeout function (timeout command not available on macOS)
+run_with_timeout() {
+    local timeout_secs=$1
+    shift
+    local cmd="$@"
+
+    # Run command in background
+    eval "$cmd" &
+    local pid=$!
+
+    # Wait for completion or timeout
+    local count=0
+    while kill -0 $pid 2>/dev/null; do
+        sleep 1
+        count=$((count + 1))
+        if [[ $count -ge $timeout_secs ]]; then
+            kill -9 $pid 2>/dev/null
+            wait $pid 2>/dev/null
+            return 124  # timeout exit code
+        fi
+    done
+
+    wait $pid
+    return $?
+}
 
 # Get stable device ID (persisted across reinstalls)
 get_device_id() {
@@ -781,37 +807,73 @@ collect_metrics() {
     # Strategy 1: speedtest-cli with --secure flag (HTTPS, may work better with proxy)
     if [[ "$speedtest_success" == "false" ]]; then
         log "Strategy 1: speedtest-cli --secure"
-        local speedtest_output=$(timeout 60 speedtest-cli --secure --simple 2>&1)
-        local speedtest_exit=$?
+        local tmp_output=$(mktemp)
 
-        if [[ $speedtest_exit -eq 0 ]] && echo "$speedtest_output" | grep -q "Download:"; then
-            LATENCY_MS=$(echo "$speedtest_output" | grep "Ping:" | awk '{print $2}')
-            DOWNLOAD_MBPS=$(echo "$speedtest_output" | grep "Download:" | awk '{print $2}')
-            UPLOAD_MBPS=$(echo "$speedtest_output" | grep "Upload:" | awk '{print $2}')
-            STATUS="success"
-            speedtest_success=true
-            log "Strategy 1 succeeded - Down: ${DOWNLOAD_MBPS} Mbps"
+        # Run speedtest with timeout (macOS-compatible)
+        speedtest-cli --secure --simple > "$tmp_output" 2>&1 &
+        local pid=$!
+        local count=0
+        while kill -0 $pid 2>/dev/null && [[ $count -lt 90 ]]; do
+            sleep 1
+            count=$((count + 1))
+        done
+        if kill -0 $pid 2>/dev/null; then
+            kill -9 $pid 2>/dev/null
+            wait $pid 2>/dev/null
+            log "Strategy 1 timed out after 90s"
         else
-            log "Strategy 1 failed: exit=$speedtest_exit"
+            wait $pid
+            local speedtest_exit=$?
+            local speedtest_output=$(cat "$tmp_output")
+
+            if [[ $speedtest_exit -eq 0 ]] && echo "$speedtest_output" | grep -q "Download:"; then
+                LATENCY_MS=$(echo "$speedtest_output" | grep "Ping:" | awk '{print $2}')
+                DOWNLOAD_MBPS=$(echo "$speedtest_output" | grep "Download:" | awk '{print $2}')
+                UPLOAD_MBPS=$(echo "$speedtest_output" | grep "Upload:" | awk '{print $2}')
+                STATUS="success"
+                speedtest_success=true
+                log "Strategy 1 succeeded - Down: ${DOWNLOAD_MBPS} Mbps, Up: ${UPLOAD_MBPS} Mbps"
+            else
+                log "Strategy 1 failed: exit=$speedtest_exit, output=$(head -1 "$tmp_output")"
+            fi
         fi
+        rm -f "$tmp_output"
     fi
 
     # Strategy 2: speedtest-cli without --secure (plain HTTP, might bypass some filters)
     if [[ "$speedtest_success" == "false" ]]; then
         log "Strategy 2: speedtest-cli standard"
-        local speedtest_output=$(timeout 60 speedtest-cli --simple 2>&1)
-        local speedtest_exit=$?
+        local tmp_output=$(mktemp)
 
-        if [[ $speedtest_exit -eq 0 ]] && echo "$speedtest_output" | grep -q "Download:"; then
-            LATENCY_MS=$(echo "$speedtest_output" | grep "Ping:" | awk '{print $2}')
-            DOWNLOAD_MBPS=$(echo "$speedtest_output" | grep "Download:" | awk '{print $2}')
-            UPLOAD_MBPS=$(echo "$speedtest_output" | grep "Upload:" | awk '{print $2}')
-            STATUS="success"
-            speedtest_success=true
-            log "Strategy 2 succeeded - Down: ${DOWNLOAD_MBPS} Mbps"
+        # Run speedtest with timeout (macOS-compatible)
+        speedtest-cli --simple > "$tmp_output" 2>&1 &
+        local pid=$!
+        local count=0
+        while kill -0 $pid 2>/dev/null && [[ $count -lt 90 ]]; do
+            sleep 1
+            count=$((count + 1))
+        done
+        if kill -0 $pid 2>/dev/null; then
+            kill -9 $pid 2>/dev/null
+            wait $pid 2>/dev/null
+            log "Strategy 2 timed out after 90s"
         else
-            log "Strategy 2 failed: exit=$speedtest_exit"
+            wait $pid
+            local speedtest_exit=$?
+            local speedtest_output=$(cat "$tmp_output")
+
+            if [[ $speedtest_exit -eq 0 ]] && echo "$speedtest_output" | grep -q "Download:"; then
+                LATENCY_MS=$(echo "$speedtest_output" | grep "Ping:" | awk '{print $2}')
+                DOWNLOAD_MBPS=$(echo "$speedtest_output" | grep "Download:" | awk '{print $2}')
+                UPLOAD_MBPS=$(echo "$speedtest_output" | grep "Upload:" | awk '{print $2}')
+                STATUS="success"
+                speedtest_success=true
+                log "Strategy 2 succeeded - Down: ${DOWNLOAD_MBPS} Mbps, Up: ${UPLOAD_MBPS} Mbps"
+            else
+                log "Strategy 2 failed: exit=$speedtest_exit, output=$(head -1 "$tmp_output")"
+            fi
         fi
+        rm -f "$tmp_output"
     fi
 
     # Strategy 3: Cloudflare speed test (simple HTTPS download - works through most proxies)
