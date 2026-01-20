@@ -418,17 +418,61 @@ class SpeedDataManager: ObservableObject {
     func updateApp() {
         guard !isUpdating else { return }
 
-        // Check if update is available first
-        if !updateAvailable {
-            updateStatus = "✓ Already up to date"
-            // Clear status after 3 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-                self?.updateStatus = ""
-            }
-            return
-        }
-
         isUpdating = true
+        updateStatus = "Checking..."
+
+        // Always do a fresh version check first
+        checkForUpdateAndProceed { [weak self] hasUpdate in
+            guard let self = self else { return }
+
+            if !hasUpdate {
+                DispatchQueue.main.async {
+                    self.updateStatus = "✓ Already up to date"
+                    self.isUpdating = false
+                    // Clear status after 3 seconds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        self.updateStatus = ""
+                    }
+                }
+                return
+            }
+
+            DispatchQueue.main.async {
+                self.updateStatus = "Downloading..."
+            }
+            self.performUpdate()
+        }
+    }
+
+    // Version check with completion handler for immediate feedback
+    private func checkForUpdateAndProceed(completion: @escaping (Bool) -> Void) {
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let versionURL = URL(string: "https://raw.githubusercontent.com/hyperkishore/home-internet/main/VERSION?t=\(timestamp)")!
+
+        var request = URLRequest(url: versionURL)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        request.setValue("no-cache, no-store, must-revalidate", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            guard let data = data,
+                  let versionString = String(data: data, encoding: .utf8) else {
+                completion(self?.updateAvailable ?? false) // Fall back to cached value
+                return
+            }
+
+            let remoteVersion = versionString.trimmingCharacters(in: .whitespacesAndNewlines)
+            let localVersion = SpeedDataManager.appVersion
+            let hasUpdate = Self.isNewerVersion(remoteVersion, than: localVersion)
+
+            DispatchQueue.main.async {
+                self?.updateAvailable = hasUpdate
+            }
+            completion(hasUpdate)
+        }.resume()
+    }
+
+    private func performUpdate() {
         updateStatus = "Downloading..."
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -624,7 +668,7 @@ class SpeedDataManager: ObservableObject {
         checkForUpdate()
     }
 
-    static let appVersion = "3.1.25"
+    static let appVersion = "3.1.26"
 
     func checkForUpdate() {
         // Check version directly from GitHub (not Railway) to avoid deployment delays
