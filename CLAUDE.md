@@ -1,4 +1,4 @@
-# Speed Monitor v3.1.15 - Organization Internet Monitoring
+# Speed Monitor v3.1.20 - Organization Internet Monitoring
 
 ## IMPORTANT: Version Management
 
@@ -121,7 +121,7 @@ home-internet/
 ```
 
 ---
-# Deployment trigger: forcing v3.1.20 to Railway - Jan 20 2026      Page_Down
+<!-- Railway deployment trigger: v3.1.20 - 2026-01-20T18:51:32 -->
 
 ## Key Files & Purposes
 
