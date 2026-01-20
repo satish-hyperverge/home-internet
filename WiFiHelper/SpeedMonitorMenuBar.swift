@@ -624,12 +624,20 @@ class SpeedDataManager: ObservableObject {
         checkForUpdate()
     }
 
-    static let appVersion = "3.1.24"
+    static let appVersion = "3.1.25"
 
     func checkForUpdate() {
         // Check version directly from GitHub (not Railway) to avoid deployment delays
-        let versionURL = URL(string: "https://raw.githubusercontent.com/hyperkishore/home-internet/main/VERSION")!
-        URLSession.shared.dataTask(with: versionURL) { [weak self] data, _, _ in
+        // Add timestamp to bypass GitHub CDN cache
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let versionURL = URL(string: "https://raw.githubusercontent.com/hyperkishore/home-internet/main/VERSION?t=\(timestamp)")!
+
+        var request = URLRequest(url: versionURL)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        request.setValue("no-cache, no-store, must-revalidate", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
             guard let data = data,
                   let versionString = String(data: data, encoding: .utf8) else { return }
 
