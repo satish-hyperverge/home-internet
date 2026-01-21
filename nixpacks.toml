@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["python3", "gcc", "gnumake", "sqlite"]
+
+[phases.install]
+cmds = ["cd dist/server && npm ci --only=production"]
+
+[start]
+cmd = "cd dist/server && npm start"
