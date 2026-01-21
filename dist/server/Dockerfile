@@ -5,14 +5,14 @@ RUN apk add --no-cache python3 make g++ sqlite
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files from dist/server
+COPY dist/server/package*.json ./
 
 # Install dependencies (including native modules)
 RUN npm ci --only=production
 
-# Copy app source
-COPY . .
+# Copy app source from dist/server
+COPY dist/server/ .
 
 # Expose port
 EXPOSE 3000
