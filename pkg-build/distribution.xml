@@ -14,5 +14,5 @@
     <choice id="com.speedmonitor.pkg" visible="false">
         <pkg-ref id="com.speedmonitor.pkg"/>
     </choice>
-    <pkg-ref id="com.speedmonitor.pkg" version="3.1.0" onConclusion="none">component.pkg</pkg-ref>
+    <pkg-ref id="com.speedmonitor.pkg" version="3.1.27" onConclusion="none">component.pkg</pkg-ref>
 </installer-gui-script>

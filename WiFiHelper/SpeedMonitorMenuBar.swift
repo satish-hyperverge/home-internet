@@ -416,10 +416,15 @@ class SpeedDataManager: ObservableObject {
     }
 
     func updateApp() {
-        guard !isUpdating else { return }
+        print("[Update] updateApp() called, isUpdating=\(isUpdating)")
+        guard !isUpdating else {
+            print("[Update] Already updating, ignoring click")
+            return
+        }
 
         isUpdating = true
         updateStatus = "Checking..."
+        print("[Update] Starting version check...")
 
         // Always do a fresh version check first
         checkForUpdateAndProceed { [weak self] hasUpdate in
@@ -449,21 +454,46 @@ class SpeedDataManager: ObservableObject {
         let timestamp = Int(Date().timeIntervalSince1970)
         let versionURL = URL(string: "https://raw.githubusercontent.com/hyperkishore/home-internet/main/VERSION?t=\(timestamp)")!
 
+        print("[Update] Checking version at \(versionURL)")
+
         var request = URLRequest(url: versionURL)
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.setValue("no-cache, no-store, must-revalidate", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        request.timeoutInterval = 10 // 10 second timeout
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            // Handle network error
+            if let error = error {
+                print("[Update] Network error: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    self?.updateStatus = "✗ Network error"
+                    self?.isUpdating = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        self?.updateStatus = ""
+                    }
+                }
+                return
+            }
+
             guard let data = data,
                   let versionString = String(data: data, encoding: .utf8) else {
-                completion(self?.updateAvailable ?? false) // Fall back to cached value
+                print("[Update] Failed to parse version data")
+                DispatchQueue.main.async {
+                    self?.updateStatus = "✗ Failed to check"
+                    self?.isUpdating = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        self?.updateStatus = ""
+                    }
+                }
                 return
             }
 
             let remoteVersion = versionString.trimmingCharacters(in: .whitespacesAndNewlines)
             let localVersion = SpeedDataManager.appVersion
             let hasUpdate = Self.isNewerVersion(remoteVersion, than: localVersion)
+
+            print("[Update] Local: \(localVersion), Remote: \(remoteVersion), Has update: \(hasUpdate)")
 
             DispatchQueue.main.async {
                 self?.updateAvailable = hasUpdate

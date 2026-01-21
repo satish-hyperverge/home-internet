@@ -159,7 +159,7 @@ if [ -f "${INSTALL_DIR}/lib/SpeedMonitorMenuBar.swift" ]; then
     <key>CFBundleName</key>
     <string>SpeedMonitor</string>
     <key>CFBundleVersion</key>
-    <string>3.1.0</string>
+    <string>${VERSION}</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSLocationWhenInUseUsageDescription</key>

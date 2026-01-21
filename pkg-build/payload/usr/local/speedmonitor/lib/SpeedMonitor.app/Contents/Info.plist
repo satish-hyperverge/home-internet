@@ -9,9 +9,9 @@
     <key>CFBundleDisplayName</key>
     <string>Speed Monitor</string>
     <key>CFBundleVersion</key>
-    <string>3.1.18</string>
+    <string>3.1.27</string>
     <key>CFBundleShortVersionString</key>
-    <string>3.1.18</string>
+    <string>3.1.27</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
